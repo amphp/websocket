@@ -6,9 +6,9 @@ use Amp\ByteStream\IteratorStream;
 use Amp\ByteStream\StreamException;
 use Amp\Coroutine;
 use Amp\Emitter;
-use Amp\Failure;
 use Amp\Promise;
 use Amp\Socket\Socket;
+use Amp\Success;
 use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\call;
 
@@ -26,7 +26,7 @@ final class Rfc6455Client implements Client
     /** @var int */
     private $id;
 
-    /** @var \Amp\Socket\ServerSocket */
+    /** @var \Amp\Socket\Socket */
     private $socket;
 
     /** @var \Amp\Promise|null */
@@ -35,7 +35,7 @@ final class Rfc6455Client implements Client
     /** @var CompressionContext|null */
     private $compressionContext;
 
-    /** @var \Amp\Emitter */
+    /** @var \Amp\Emitter|null */
     private $messageEmitter;
 
     private $pingCount = 0;
@@ -61,9 +61,6 @@ final class Rfc6455Client implements Client
     private $framesSent = 0;
     private $messagesRead = 0;
     private $messagesSent = 0;
-
-    private $autoFrameSize = (64 << 10) - 9;
-    private $validateUtf8 = false;
 
     public function __construct(
         Socket $socket,
@@ -113,6 +110,21 @@ final class Rfc6455Client implements Client
     public function getUnansweredPingCount(): int
     {
         return $this->pingCount - $this->pongCount;
+    }
+
+    public function isOpen(): bool
+    {
+        return !$this->closedAt;
+    }
+
+    public function getLocalAddress(): string
+    {
+        return $this->socket->getLocalAddress();
+    }
+
+    public function getRemoteAddress(): string
+    {
+        return $this->socket->getRemoteAddress();
     }
 
     public function getInfo(): array
@@ -210,13 +222,13 @@ final class Rfc6455Client implements Client
                     ) {
                         $code = Code::PROTOCOL_ERROR;
                         $reason = 'Invalid close code';
-                    } elseif ($this->validateUtf8 && !\preg_match('//u', $reason)) {
+                    } elseif ($this->options->isValidateUtf8() && !\preg_match('//u', $reason)) {
                         $code = Code::INCONSISTENT_FRAME_DATA_TYPE;
                         $reason = 'Close reason must be valid UTF-8';
                     }
                 }
 
-                Promise\rethrow(new Coroutine($this->doClose($code, $reason)));
+                $this->close($code, $reason);
                 break;
 
             case Opcode::PING:
@@ -233,23 +245,18 @@ final class Rfc6455Client implements Client
 
     private function onError(int $code, string $reason): void
     {
-        // something went that wrong that we had to close... if parser has anything left, we don't care!
-        if ($this->closedAt) {
-            return;
-        }
-
-        Promise\rethrow(new Coroutine($this->doClose($code, $reason)));
+        $this->close($code, $reason);
     }
 
     public function send(string $data): Promise
     {
         \assert(\preg_match('//u', $data), 'Text data must be UTF-8');
-        return $this->lastWrite = new Coroutine($this->doSend($data, Opcode::TEXT));
+        return $this->lastWrite = new Coroutine($this->post($data, Opcode::TEXT));
     }
 
     public function sendBinary(string $data): Promise
     {
-        return $this->lastWrite = new Coroutine($this->doSend($data, Opcode::BIN));
+        return $this->lastWrite = new Coroutine($this->post($data, Opcode::BIN));
     }
 
     public function ping(): Promise
@@ -258,7 +265,7 @@ final class Rfc6455Client implements Client
         return $this->write((string) $this->pingCount, Opcode::PING);
     }
 
-    private function doSend(string $data, int $opcode): \Generator
+    private function post(string $data, int $opcode): \Generator
     {
         if ($this->lastWrite) {
             yield $this->lastWrite;
@@ -276,9 +283,9 @@ final class Rfc6455Client implements Client
         try {
             $bytes = 0;
 
-            if (\strlen($data) > $this->autoFrameSize) {
+            if (\strlen($data) > $this->options->getFrameSplitThreshold()) {
                 $len = \strlen($data);
-                $slices = \ceil($len / $this->autoFrameSize);
+                $slices = \ceil($len / $this->options->getFrameSplitThreshold());
                 $chunks = \str_split($data, \ceil($len / $slices));
                 $final = \array_pop($chunks);
                 foreach ($chunks as $chunk) {
@@ -291,9 +298,9 @@ final class Rfc6455Client implements Client
                 $bytes = yield $this->write($data, $opcode, $rsv);
             }
         } catch (\Throwable $exception) {
-            $this->close();
+            \assert($this->logger->debug(\sprintf('Writing to Websocket client %s failed', $this->getRemoteAddress())) || true);
+            $this->close(Code::ABNORMAL_CLOSE, 'Writing to the client failed');
             $this->lastWrite = null; // prevent storing a cyclic reference
-            throw $exception;
         }
 
         return $bytes;
@@ -302,7 +309,7 @@ final class Rfc6455Client implements Client
     private function write(string $msg, int $opcode, int $rsv = 0, bool $fin = true): Promise
     {
         if ($this->closedAt) {
-            return new Failure(new WebsocketException);
+            return new Success(0);
         }
 
         $frame = $this->compile($msg, $opcode, $rsv, $fin);
@@ -314,9 +321,9 @@ final class Rfc6455Client implements Client
         return $this->socket->write($frame);
     }
 
-    private function compile(string $msg, int $opcode, int $rsv, bool $fin): string
+    private function compile(string $data, int $opcode, int $rsv, bool $fin): string
     {
-        $len = \strlen($msg);
+        $len = \strlen($data);
         $w = \chr(($fin << 7) | ($rsv << 4) | $opcode);
 
         if ($len > 0xFFFF) {
@@ -327,57 +334,48 @@ final class Rfc6455Client implements Client
             $w .= \chr($len);
         }
 
-        return $w . $msg;
-    }
-
-    private function doClose(int $code, string $reason): \Generator
-    {
-        // Only proceed if we haven't already begun the close handshake elsewhere
-        if ($this->closedAt) {
-            return 0;
-        }
-
-        $this->closeCode = $code;
-        $this->closeReason = $reason;
-
-        $bytes = 0;
-
-        try {
-            $promise = $this->sendCloseFrame($code, $reason);
-            yield from $this->tryAppOnClose($code, $reason);
-            $bytes = yield $promise;
-        } catch (WebsocketException $e) {
-            // Ignore client failures.
-        } catch (StreamException $e) {
-            // Ignore stream failures, closing anyway.
-        } finally {
-            $this->socket->close();
-            $this->parser = null;
-        }
-
-        return $bytes;
+        return $w . $data;
     }
 
     public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): Promise
     {
-        return new Coroutine($this->doClose($code, $reason));
-    }
+        if ($this->closedAt) {
+            return new Success(0);
+        }
 
-    private function sendCloseFrame(int $code, string $msg): Promise
-    {
-        \assert($code !== Code::NONE || $msg === '');
-        $promise = $this->write($code !== Code::NONE ? \pack('n', $code) . $msg : '', Opcode::CLOSE);
-        $this->closedAt = \time();
-        return $promise;
+        return call(function () use ($code, $reason) {
+            $this->closeCode = $code;
+            $this->closeReason = $reason;
+
+            $bytes = 0;
+
+            try {
+                \assert($code !== Code::NONE || $reason === '');
+                $promise = $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
+
+                $this->closedAt = \time();
+
+                yield from $this->tryAppOnClose($code, $reason);
+
+                $bytes = yield $promise;
+            } catch (WebsocketException $e) {
+                // Ignore client failures.
+            } catch (StreamException $e) {
+                // Ignore stream failures, closing anyway.
+            } finally {
+                $this->socket->close();
+            }
+
+            return $bytes;
+        });
     }
 
     private function tryAppOnMessage(Message $message): \Generator
     {
         try {
             yield call([$this->application, 'onData'], $this, $message);
-            yield $this->application->onData($this, $message);
         } catch (\Throwable $e) {
-            yield from $this->onAppError($e);
+            yield $this->onAppError($e);
         }
     }
 
@@ -386,16 +384,14 @@ final class Rfc6455Client implements Client
         try {
             yield call([$this->application, 'onClose'], $this, $code, $reason);
         } catch (\Throwable $e) {
-            yield from $this->onAppError($e);
+            yield $this->onAppError($e);
         }
     }
 
-    private function onAppError(\Throwable $e): \Generator
+    private function onAppError(\Throwable $e): Promise
     {
         $this->logger->error((string) $e);
-        $code = Code::UNEXPECTED_SERVER_ERROR;
-        $reason = 'Internal server error, aborting';
-        yield from $this->doClose($code, $reason);
+        return $this->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
     }
 
     /**
@@ -410,7 +406,7 @@ final class Rfc6455Client implements Client
         $options = $client->options;
 
         $maxFrameSize = $options->getMaximumFrameSize();
-        $maxMessageSize = $options->getMaximumFrameSize();
+        $maxMessageSize = $options->getMaximumMessageSize();
         $textOnly = $options->isTextOnly();
         $doUtf8Validation = $validateUtf8 = $options->isValidateUtf8();
 

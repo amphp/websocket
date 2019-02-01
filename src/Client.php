@@ -12,6 +12,21 @@ interface Client
     public function getId(): int;
 
     /**
+     * @return bool True if the client is still connected, false otherwise.
+     */
+    public function isOpen(): bool;
+
+    /**
+     * @return string The local IP address of the client.
+     */
+    public function getLocalAddress(): string;
+
+    /**
+     * @return string The remote IP address of the client.
+     */
+    public function getRemoteAddress(): string;
+
+    /**
      * @return int Number of pings sent that have not been answered.
      */
     public function getUnansweredPingCount(): int;
