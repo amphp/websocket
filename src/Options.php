@@ -11,7 +11,7 @@ class Options
     private $maximumFrameSize = 2097152;
     private $maximumMessageSize = 10485760;
     private $textOnly = false;
-    private $validateUtf8 = false;
+    private $validateUtf8 = true;
     private $closePeriod = 3;
     private $compressionEnabled = true;
 

@@ -99,14 +99,14 @@ final class Rfc6455Client implements Client
         $parser = self::parser($this);
 
         return function (string $chunk) use ($parser): int {
-            if ($this->closedAt === null) {
+            if ($this->closedAt) {
                 return 0;
             }
 
             $this->lastReadAt = \time();
             $this->bytesRead += \strlen($chunk);
 
-            $frames = $parser->send($chunk);
+            $frames = (int) $parser->send($chunk);
             $this->framesRead += $frames;
 
             return $frames;
@@ -433,7 +433,7 @@ final class Rfc6455Client implements Client
         $doUtf8Validation = $validateUtf8 = $options->isValidateUtf8();
 
         $compressionContext = $client->compressionContext;
-        $compressedFlag = $compressionContext->getRsv();
+        $compressedFlag = $compressionContext ? $compressionContext->getRsv() : 0;
 
         $dataMsgBytesRecd = 0;
         $savedBuffer = '';
