@@ -11,12 +11,46 @@ final class Rfc7692Compression implements CompressionContext
     private const EMPTY_BLOCK = "\x0\x0\xff\xff";
 
     /**
+     * Create a compression context from a header received from a websocket client request.
+     *
      * @param string $headerIn Header from request.
      * @param string $headerOut Sec-Websocket-Extension response header.
      *
      * @return self|null
      */
-    public static function fromHeader(string $headerIn, string &$headerOut = null): ?self
+    public static function fromClientHeader(string $headerIn, string &$headerOut): ?self
+    {
+        return self::fromHeader(true, $headerIn, $headerOut);
+    }
+
+    /**
+     * Create a compression context from a header received from a websocket server response.
+     *
+     * @param string $header Header from response.
+     *
+     * @return self|null
+     */
+    public static function fromServerHeader(string $header): ?self
+    {
+        return self::fromHeader(false, $header);
+    }
+
+    /**
+     * @return string Header value for Sec-Websocket-Extension header.
+     */
+    public static function createRequestHeader(): string
+    {
+        return 'permessage-deflate';
+    }
+
+    /**
+     * @param bool   $isServer True if creating a server context, false if creating a client context.
+     * @param string $headerIn Header from request.
+     * @param string $headerOut Sec-Websocket-Extension response header.
+     *
+     * @return self|null
+     */
+    private static function fromHeader(bool $isServer, string $headerIn, string &$headerOut = null): ?self
     {
         $headerIn = \explode(';', \strtolower($headerIn));
         $headerIn = \array_map('trim', $headerIn);
@@ -89,7 +123,11 @@ final class Rfc7692Compression implements CompressionContext
             }
         }
 
-        return new self($clientWindowSize, $serverWindowSize, $clientContextTakeover, $serverContextTakeover);
+        if ($isServer) {
+            return new self($clientWindowSize, $serverWindowSize, $clientContextTakeover, $serverContextTakeover);
+        }
+
+        return new self($serverWindowSize, $clientWindowSize, $serverContextTakeover, $clientContextTakeover);
     }
 
     /** @var resource */
@@ -97,24 +135,24 @@ final class Rfc7692Compression implements CompressionContext
     /** @var resource */
     private $inflate;
     /** @var bool */
-    private $serverContextTakeover;
+    private $sendingFlushMode;
     /** @var bool */
-    private $clientContextTakeover;
+    private $receivingFlushMode;
 
     private function __construct(
-        int $clientWindowSize,
-        int $serverWindowSize,
-        bool $clientContextTakeover,
-        bool $serverContextTakeover
+        int $receivingWindowSize,
+        int $sendingWindowSize,
+        bool $receivingContextTakeover,
+        bool $sendingContextTakeover
     ) {
-        $this->clientContextTakeover = $clientContextTakeover;
-        $this->serverContextTakeover = $serverContextTakeover;
+        $this->receivingFlushMode = $receivingContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH;
+        $this->sendingFlushMode = $sendingContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH;
 
-        if (($this->inflate = \inflate_init(\ZLIB_ENCODING_RAW, ['window' => $clientWindowSize])) === false) {
+        if (($this->inflate = \inflate_init(\ZLIB_ENCODING_RAW, ['window' => $receivingWindowSize])) === false) {
             throw new \RuntimeException('Failed initializing inflate context');
         }
 
-        if (($this->deflate = \deflate_init(\ZLIB_ENCODING_RAW, ['window' => $serverWindowSize])) === false) {
+        if (($this->deflate = \deflate_init(\ZLIB_ENCODING_RAW, ['window' => $sendingWindowSize])) === false) {
             throw new \RuntimeException('Failed initializing deflate context');
         }
     }
@@ -131,11 +169,7 @@ final class Rfc7692Compression implements CompressionContext
 
     public function decompress(string $data): ?string
     {
-        $data = \inflate_add(
-            $this->inflate,
-            $data . self::EMPTY_BLOCK,
-            $this->clientContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH
-        );
+        $data = \inflate_add($this->inflate, $data . self::EMPTY_BLOCK, $this->receivingFlushMode);
 
         if (false === $data) {
             return null;
@@ -146,7 +180,7 @@ final class Rfc7692Compression implements CompressionContext
 
     public function compress(string $data): string
     {
-        $data = \deflate_add($this->deflate, $data, $this->serverContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH);
+        $data = \deflate_add($this->deflate, $data, $this->sendingFlushMode);
         if ($data === false) {
             throw new \RuntimeException('Failed to compress data');
         }
