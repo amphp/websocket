@@ -4,11 +4,13 @@ namespace Amp\Http\Websocket\Test;
 
 use Amp\Http\Websocket\Application;
 use Amp\Http\Websocket\Client;
+use Amp\Http\Websocket\ClosedException;
 use Amp\Http\Websocket\Code;
 use Amp\Http\Websocket\Message;
 use Amp\Http\Websocket\Opcode;
 use Amp\Http\Websocket\Options;
 use Amp\Http\Websocket\Rfc6455Client;
+use Amp\Loop;
 use Amp\PHPUnit\TestCase;
 use Amp\Socket\Socket;
 use Psr\Log\LoggerInterface as PsrLogger;
@@ -50,51 +52,33 @@ class ParserTest extends TestCase
         ?string $reason = null,
         ?int $code = null
     ): void {
-        $application = new class($this, $data, $isBinary, $code, $reason) implements Application {
-            private $test;
-            private $data;
-            private $binary;
-            private $code;
-            private $reason;
+        Loop::run(function () use ($chunk, $frameCount, $data, $isBinary, $code, $reason) {
+            $client = new Rfc6455Client($this->createMock(Socket::class), new Options, false);
 
-            public function __construct(TestCase $test, ?string $data, bool $isBinary, ?int $code, ?string $reason)
-            {
-                $this->test = $test;
-                $this->data = $data;
-                $this->binary = $isBinary;
-                $this->code = $code;
-                $this->reason = $reason;
+            $parser = $client->setup();
+
+            $frames = $parser($chunk);
+            $client->close();
+
+            $this->assertSame($frameCount, $frames);
+
+            try {
+                while ($message = yield $client->receive()) {
+                    \assert($message instanceof Message);
+                    $this->assertSame($data, yield $message->buffer());
+                    $this->assertSame($isBinary, $message->isBinary());
+                }
+            } catch (ClosedException $exception) {
+                $this->assertSame($code, $exception->getCode());
+                $this->assertSame($reason, $exception->getReason());
+                return;
             }
 
-            public function onData(Client $client, Message $message)
-            {
-                $this->test->assertSame($this->data, yield $message->buffer());
-                $this->test->assertSame($this->binary, $message->isBinary());
-            }
+            $info = $client->getInfo();
+            $this->assertSame(Code::NORMAL_CLOSE, $info['close_code']);
+            $this->assertSame('', $info['close_reason']);
 
-            public function onClose(Client $client, int $code, string $reason)
-            {
-                $this->test->assertSame($this->code, $code);
-                $this->test->assertSame($this->reason, $reason);
-            }
-        };
-
-        $logger = $this->createMock(PsrLogger::class);
-        $logger->expects($this->never())
-            ->method('error');
-
-        $client = new Rfc6455Client(
-            $this->createMock(Socket::class),
-            $logger,
-            new Options,
-            false
-        );
-
-        $parser = $client->setup($application);
-
-        $frames = $parser($chunk);
-
-        $this->assertSame($frameCount, $frames);
+        });
     }
 
     public function provideParserData(): array

@@ -7,14 +7,25 @@ use Amp\Promise;
 interface Client
 {
     /**
+     * Receive a message from the remote.
+     *
+     * @return Promise<Message|null> Resolves to message sent by the remote or `null` if the connection was
+     *     closed locally.
+     *
+     * @throws ClosedException Thrown if the connection is closed unexpectedly by the peer.
+     */
+    public function receive(): Promise;
+
+    /**
      * @return int Unique integer identifier for the client.
      */
     public function getId(): int;
 
     /**
-     * @return bool True if the client is still connected, false otherwise.
+     * @return bool True if the client is still connected, false otherwise. Returns false as soon as the closing
+     *     handshake is initiated by the server or client.
      */
-    public function isOpen(): bool;
+    public function isConnected(): bool;
 
     /**
      * @return string The local IP address of the client.
@@ -32,9 +43,10 @@ interface Client
     public function getUnansweredPingCount(): int;
 
     /**
-     * Sends a text message to the endpoint.
+     * Sends a text message to the endpoint. All data sent with this method must be valid UTF-8. Use `sendBinary()` if
+     * you want to send binary data.
      *
-     * @param string $data
+     * @param string $data Payload to send.
      *
      * @return Promise
      */
@@ -43,7 +55,7 @@ interface Client
     /**
      * Sends a binary message to the endpoint.
      *
-     * @param string $data
+     * @param string $data Payload to send.
      *
      * @return Promise
      */
@@ -57,7 +69,28 @@ interface Client
     public function ping(): Promise;
 
     /**
-     * @return array
+     * Returns connection metadata.
+     *
+     * ```
+     * [
+     *     'bytes_read' => int,
+     *     'bytes_sent' => int,
+     *     'frames_read' => int,
+     *     'frames_sent' => int,
+     *     'messages_read' => int,
+     *     'messages_sent' => int,
+     *     'connected_at' => int,
+     *     'closed_at' => int,
+     *     'close_code' => int|null,
+     *     'close_reason' => string|null,
+     *     'last_read_at' => int,
+     *     'last_sent_at' => int,
+     *     'last_data_read_at' => int,
+     *     'last_data_sent_at' => int,
+     * ]
+     * ```
+     *
+     * @return array Array in the format described above.
      */
     public function getInfo(): array;
 

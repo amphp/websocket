@@ -4,7 +4,9 @@ namespace Amp\Http\Websocket;
 
 use Amp\ByteStream\IteratorStream;
 use Amp\Coroutine;
+use Amp\Deferred;
 use Amp\Emitter;
+use Amp\Failure;
 use Amp\Promise;
 use Amp\Socket\Socket;
 use Amp\Success;
@@ -13,8 +15,8 @@ use function Amp\call;
 
 final class Rfc6455Client implements Client
 {
-    /** @var Application|null */
-    private $application;
+    /** @var \Generator|null */
+    private $parser;
 
     /** @var PsrLogger */
     private $logger;
@@ -37,8 +39,14 @@ final class Rfc6455Client implements Client
     /** @var CompressionContext|null */
     private $compressionContext;
 
-    /** @var \Amp\Emitter|null */
-    private $messageEmitter;
+    /** @var Emitter|null */
+    private $currentMessageEmitter;
+
+    /** @var Deferred|null */
+    private $nextMessageDeferred;
+
+    /** @var Message[] */
+    private $messages = [];
 
     private $pingCount = 0;
     private $pongCount = 0;
@@ -51,6 +59,9 @@ final class Rfc6455Client implements Client
 
     /** @var string|null */
     private $closeReason;
+
+    /** @var bool */
+    private $peerInitiatedClose = false;
 
     private $closedAt = 0;
     private $lastReadAt = 0;
@@ -66,14 +77,12 @@ final class Rfc6455Client implements Client
 
     /**
      * @param Socket                  $socket
-     * @param PsrLogger               $logger Log for application errors and debug messages.
      * @param Options                 $options
      * @param bool                    $masked True for client, false for server.
      * @param CompressionContext|null $compression
      */
     public function __construct(
         Socket $socket,
-        PsrLogger $logger,
         Options $options,
         bool $masked,
         ?CompressionContext $compression = null
@@ -81,24 +90,21 @@ final class Rfc6455Client implements Client
         $this->connectedAt = \time();
 
         $this->socket = $socket;
-        $this->logger = $logger;
         $this->options = $options;
         $this->id = (int) $socket->getResource();
         $this->masked = $masked;
         $this->compressionContext = $compression;
     }
 
-    public function setup(Application $application): callable
+    public function setup(): callable
     {
-        if ($this->application) {
+        if ($this->parser) {
             throw new \Error('Client has already been setup');
         }
 
-        $this->application = $application;
+        $this->parser = $this->parser();
 
-        $parser = self::parser($this);
-
-        return function (string $chunk) use ($parser): int {
+        return function (string $chunk): int {
             if ($this->closedAt) {
                 return 0;
             }
@@ -106,11 +112,43 @@ final class Rfc6455Client implements Client
             $this->lastReadAt = \time();
             $this->bytesRead += \strlen($chunk);
 
-            $frames = (int) $parser->send($chunk);
+            $frames = (int) $this->parser->send($chunk);
             $this->framesRead += $frames;
 
             return $frames;
         };
+    }
+
+    public function receive(): Promise
+    {
+        if ($this->nextMessageDeferred) {
+            throw new \Error('Await the previous promise returned from receive() before calling receive() again.');
+        }
+
+        // There might be messages already buffered and a close frame already received
+        if ($this->messages) {
+            $message = \reset($this->messages);
+            unset($this->messages[\key($this->messages)]);
+
+            return new Success($message);
+        }
+
+        if ($this->closedAt) {
+            // User kept in while loop after previous promise already resolved
+            if ($this->peerInitiatedClose) {
+                return new Failure(
+                    new ClosedException('The connection was closed by the peer', $this->closeCode, $this->closeReason)
+                );
+            }
+
+            // Might happen if close() is called outside the receive coroutine.
+            // Succeed with null instead of erroring out just as with a pending receive on close.
+            return new Success;
+        }
+
+        $this->nextMessageDeferred = new Deferred;
+
+        return $this->nextMessageDeferred->promise();
     }
 
     public function getId(): int
@@ -123,7 +161,7 @@ final class Rfc6455Client implements Client
         return $this->pingCount - $this->pongCount;
     }
 
-    public function isOpen(): bool
+    public function isConnected(): bool
     {
         return !$this->closedAt;
     }
@@ -169,7 +207,7 @@ final class Rfc6455Client implements Client
 
         $this->lastDataReadAt = \time();
 
-        if (!$this->messageEmitter) {
+        if (!$this->currentMessageEmitter) {
             if ($opcode === Opcode::CONT) {
                 $this->onError(
                     Code::PROTOCOL_ERROR,
@@ -178,14 +216,15 @@ final class Rfc6455Client implements Client
                 return;
             }
 
-            $this->messageEmitter = new Emitter;
-            $message = new Message(new IteratorStream($this->messageEmitter->iterate()), $opcode === Opcode::BIN);
+            $this->currentMessageEmitter = new Emitter;
+            $message = new Message(new IteratorStream($this->currentMessageEmitter->iterate()), $opcode === Opcode::BIN);
 
-            Promise\rethrow(new Coroutine($this->tryAppOnMessage($message)));
-
-            // Something went wrong and the client has been closed and emitter failed.
-            if (!$this->messageEmitter) {
-                return;
+            if ($this->nextMessageDeferred) {
+                $deferred = $this->nextMessageDeferred;
+                $this->nextMessageDeferred = null;
+                $deferred->resolve($message);
+            } else {
+                $this->messages[] = $message;
             }
         } elseif ($opcode !== Opcode::CONT) {
             $this->onError(
@@ -195,11 +234,13 @@ final class Rfc6455Client implements Client
             return;
         }
 
-        $this->messageEmitter->emit($data);
+        $this->currentMessageEmitter->emit($data);
 
         if ($terminated) {
-            $this->messageEmitter->complete();
-            $this->messageEmitter = null;
+            $emitter = $this->currentMessageEmitter;
+            $this->currentMessageEmitter = null;
+            $emitter->complete();
+
             ++$this->messagesRead;
         }
     }
@@ -213,6 +254,10 @@ final class Rfc6455Client implements Client
 
         switch ($opcode) {
             case Opcode::CLOSE:
+                if ($this->closedAt) {
+                    break;
+                }
+
                 $length = \strlen($data);
                 if ($length === 0) {
                     $code = Code::NONE;
@@ -239,6 +284,8 @@ final class Rfc6455Client implements Client
                     }
                 }
 
+                $this->peerInitiatedClose = true;
+
                 $this->close($code, $reason);
                 break;
 
@@ -256,6 +303,7 @@ final class Rfc6455Client implements Client
 
     private function onError(int $code, string $reason): void
     {
+        $this->peerInitiatedClose = true;
         $this->close($code, $reason);
     }
 
@@ -312,7 +360,6 @@ final class Rfc6455Client implements Client
                 $bytes = yield $this->write($data, $opcode, $rsv);
             }
         } catch (\Throwable $exception) {
-            \assert($this->logger->debug(\sprintf('Writing to Websocket client %s failed', $this->getRemoteAddress())) || true);
             $this->close(Code::ABNORMAL_CLOSE, 'Writing to the client failed');
             $this->lastWrite = null; // prevent storing a cyclic reference
         }
@@ -380,59 +427,51 @@ final class Rfc6455Client implements Client
 
                 $this->closedAt = \time();
 
-                yield from $this->tryAppOnClose($code, $reason);
+                if ($this->currentMessageEmitter || $this->nextMessageDeferred) {
+                    $exception = new ClosedException('Connection unexpectedly closed', $code, $reason);
+
+                    if ($this->currentMessageEmitter) {
+                        $emitter = $this->currentMessageEmitter;
+                        $this->currentMessageEmitter = null;
+                        $emitter->fail($exception);
+                    }
+
+                    if ($this->nextMessageDeferred) {
+                        $deferred = $this->nextMessageDeferred;
+                        $this->nextMessageDeferred = null;
+
+                        if ($this->peerInitiatedClose) {
+                            $deferred->fail($exception);
+                        } else {
+                            $deferred->resolve();
+                        }
+                    }
+                }
 
                 $bytes = yield $promise;
             } finally {
                 $this->socket->close();
-                $this->application = null;
+                $this->parser = null;
+                $this->lastWrite = null;
             }
 
             return $bytes;
         });
     }
 
-    private function tryAppOnMessage(Message $message): \Generator
-    {
-        try {
-            yield call([$this->application, 'onData'], $this, $message);
-        } catch (\Throwable $e) {
-            yield $this->onAppError($e);
-        }
-    }
-
-    private function tryAppOnClose(int $code, string $reason): \Generator
-    {
-        try {
-            yield call([$this->application, 'onClose'], $this, $code, $reason);
-        } catch (\Throwable $e) {
-            yield $this->onAppError($e);
-        }
-    }
-
-    private function onAppError(\Throwable $e): Promise
-    {
-        $this->logger->error((string) $e);
-        return $this->close(Code::UNEXPECTED_SERVER_ERROR, 'Internal server error, aborting');
-    }
-
     /**
      * A stateful generator websocket frame parser.
      *
-     * @param self $client Client associated with event emissions.
-     *
      * @return \Generator
      */
-    private static function parser(self $client): \Generator
+    private function parser(): \Generator
     {
-        $options = $client->options;
+        $maxFrameSize = $this->options->getMaximumFrameSize();
+        $maxMessageSize = $this->options->getMaximumMessageSize();
+        $textOnly = $this->options->isTextOnly();
+        $doUtf8Validation = $validateUtf8 = $this->options->isValidateUtf8();
 
-        $maxFrameSize = $options->getMaximumFrameSize();
-        $maxMessageSize = $options->getMaximumMessageSize();
-        $textOnly = $options->isTextOnly();
-        $doUtf8Validation = $validateUtf8 = $options->isValidateUtf8();
-
-        $compressionContext = $client->compressionContext;
+        $compressionContext = $this->compressionContext;
         $compressedFlag = $compressionContext ? $compressionContext->getRsv() : 0;
 
         $dataMsgBytesRecd = 0;
@@ -472,12 +511,12 @@ final class Rfc6455Client implements Client
             $frameLength = $secondByte & 0b01111111;
 
             if ($opcode >= 3 && $opcode <= 7) {
-                $client->onError(Code::PROTOCOL_ERROR, 'Use of reserved non-control frame opcode');
+                $this->onError(Code::PROTOCOL_ERROR, 'Use of reserved non-control frame opcode');
                 return;
             }
 
             if ($opcode >= 11 && $opcode <= 15) {
-                $client->onError(Code::PROTOCOL_ERROR, 'Use of reserved control frame opcode');
+                $this->onError(Code::PROTOCOL_ERROR, 'Use of reserved control frame opcode');
                 return;
             }
 
@@ -485,12 +524,12 @@ final class Rfc6455Client implements Client
 
             if ($isControlFrame || $opcode === Opcode::CONT) { // Control and continuation frames
                 if ($rsv !== 0) {
-                    $client->onError(Code::PROTOCOL_ERROR, 'RSV must be 0 for control or continuation frames');
+                    $this->onError(Code::PROTOCOL_ERROR, 'RSV must be 0 for control or continuation frames');
                     return;
                 }
             } else { // Text and binary frames
                 if ($rsv !== 0 && (!$compressionContext || $rsv & ~$compressedFlag)) {
-                    $client->onError(Code::PROTOCOL_ERROR, 'Invalid RSV value for negotiated extensions');
+                    $this->onError(Code::PROTOCOL_ERROR, 'Invalid RSV value for negotiated extensions');
                     return;
                 }
 
@@ -529,7 +568,7 @@ final class Rfc6455Client implements Client
 
                 if (PHP_INT_MAX === 0x7fffffff) {
                     if ($lengthLong32Pair[1] !== 0 || $lengthLong32Pair[2] < 0) {
-                        $client->onError(
+                        $this->onError(
                             Code::MESSAGE_TOO_LARGE,
                             'Received payload exceeds maximum allowable size'
                         );
@@ -539,7 +578,7 @@ final class Rfc6455Client implements Client
                 } else {
                     $frameLength = ($lengthLong32Pair[1] << 32) | $lengthLong32Pair[2];
                     if ($frameLength < 0) {
-                        $client->onError(
+                        $this->onError(
                             Code::PROTOCOL_ERROR,
                             'Most significant bit of 64-bit length field set'
                         );
@@ -548,8 +587,8 @@ final class Rfc6455Client implements Client
                 }
             }
 
-            if ($frameLength > 0 && $isMasked === $client->masked) {
-                $client->onError(
+            if ($frameLength > 0 && $isMasked === $this->masked) {
+                $this->onError(
                     Code::PROTOCOL_ERROR,
                     'Payload mask error'
                 );
@@ -558,7 +597,7 @@ final class Rfc6455Client implements Client
 
             if ($isControlFrame) {
                 if (!$final) {
-                    $client->onError(
+                    $this->onError(
                         Code::PROTOCOL_ERROR,
                         'Illegal control frame fragmentation'
                     );
@@ -566,7 +605,7 @@ final class Rfc6455Client implements Client
                 }
 
                 if ($frameLength > 125) {
-                    $client->onError(
+                    $this->onError(
                         Code::PROTOCOL_ERROR,
                         'Control frame payload must be of maximum 125 bytes or less'
                     );
@@ -575,7 +614,7 @@ final class Rfc6455Client implements Client
             }
 
             if ($maxFrameSize && $frameLength > $maxFrameSize) {
-                $client->onError(
+                $this->onError(
                     Code::MESSAGE_TOO_LARGE,
                     'Received payload exceeds maximum allowable size'
                 );
@@ -583,7 +622,7 @@ final class Rfc6455Client implements Client
             }
 
             if ($maxMessageSize && ($frameLength + $dataMsgBytesRecd) > $maxMessageSize) {
-                $client->onError(
+                $this->onError(
                     Code::MESSAGE_TOO_LARGE,
                     'Received payload exceeds maximum allowable size'
                 );
@@ -591,7 +630,7 @@ final class Rfc6455Client implements Client
             }
 
             if ($textOnly && $opcode === Opcode::BIN) {
-                $client->onError(
+                $this->onError(
                     Code::UNACCEPTABLE_TYPE,
                     'BINARY opcodes (0x02) not accepted'
                 );
@@ -632,7 +671,7 @@ final class Rfc6455Client implements Client
             }
 
             if ($isControlFrame) {
-                $client->onControlFrame($opcode, $payload);
+                $this->onControlFrame($opcode, $payload);
                 $frames++;
                 continue;
             }
@@ -659,7 +698,7 @@ final class Rfc6455Client implements Client
                 $payload = $compressionContext->decompress($payload);
 
                 if ($payload === null) { // Decompression failed.
-                    $client->onError(
+                    $this->onError(
                         Code::PROTOCOL_ERROR,
                         'Invalid compressed data'
                     );
@@ -682,7 +721,7 @@ final class Rfc6455Client implements Client
                 }
 
                 if (!$valid) {
-                    $client->onError(
+                    $this->onError(
                         Code::INCONSISTENT_FRAME_DATA_TYPE,
                         'Invalid TEXT data; UTF-8 required'
                     );
@@ -697,7 +736,7 @@ final class Rfc6455Client implements Client
                 $savedOpcode = null;
             }
 
-            $client->onData($opcode, $payload, $final);
+            $this->onData($opcode, $payload, $final);
             $frames++;
         }
     }
