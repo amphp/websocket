@@ -1,6 +1,6 @@
 <?php
 
-namespace Amp\Http\Websocket;
+namespace Amp\Websocket;
 
 /**
  * Generates the value for the Sec-Websocket-Accept header based on the given Sec-Websocket-Key header value.

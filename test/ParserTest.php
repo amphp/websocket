@@ -1,19 +1,16 @@
 <?php
 
-namespace Amp\Http\Websocket\Test;
+namespace Amp\Websocket\Test;
 
-use Amp\Http\Websocket\Application;
-use Amp\Http\Websocket\Client;
-use Amp\Http\Websocket\ClosedException;
-use Amp\Http\Websocket\Code;
-use Amp\Http\Websocket\Message;
-use Amp\Http\Websocket\Opcode;
-use Amp\Http\Websocket\Options;
-use Amp\Http\Websocket\Rfc6455Client;
 use Amp\Loop;
 use Amp\PHPUnit\TestCase;
 use Amp\Socket\Socket;
-use Psr\Log\LoggerInterface as PsrLogger;
+use Amp\Websocket\ClosedException;
+use Amp\Websocket\Code;
+use Amp\Websocket\Message;
+use Amp\Websocket\Opcode;
+use Amp\Websocket\Options;
+use Amp\Websocket\Rfc6455Client;
 
 class ParserTest extends TestCase
 {
@@ -77,7 +74,6 @@ class ParserTest extends TestCase
             $info = $client->getInfo();
             $this->assertSame(Code::NORMAL_CLOSE, $info['close_code']);
             $this->assertSame('', $info['close_reason']);
-
         });
     }
 

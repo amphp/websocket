@@ -1,6 +1,6 @@
 <?php
 
-namespace Amp\Http\Websocket;
+namespace Amp\Websocket;
 
 class Options
 {

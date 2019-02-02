@@ -43,7 +43,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Amp\\Http\\Websocket\\": "src"
+            "Amp\\Websocket\\": "src"
         },
         "files": [
             "src/constants.php",
@@ -52,7 +52,12 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Amp\\Http\\Websocket\\Test\\": "test"
+            "Amp\\Websocket\\Test\\": "test"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "7.1"
         }
     }
 }
