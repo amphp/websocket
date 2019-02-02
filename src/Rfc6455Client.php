@@ -3,7 +3,6 @@
 namespace Amp\Http\Websocket;
 
 use Amp\ByteStream\IteratorStream;
-use Amp\ByteStream\StreamException;
 use Amp\Coroutine;
 use Amp\Emitter;
 use Amp\Promise;
@@ -31,6 +30,9 @@ final class Rfc6455Client implements Client
 
     /** @var \Amp\Promise|null */
     private $lastWrite;
+
+    /** @var bool */
+    private $masked;
 
     /** @var CompressionContext|null */
     private $compressionContext;
@@ -62,10 +64,18 @@ final class Rfc6455Client implements Client
     private $messagesRead = 0;
     private $messagesSent = 0;
 
+    /**
+     * @param Socket                  $socket
+     * @param PsrLogger               $logger Log for application errors and debug messages.
+     * @param Options                 $options
+     * @param bool                    $masked True for client, false for server.
+     * @param CompressionContext|null $compression
+     */
     public function __construct(
         Socket $socket,
         PsrLogger $logger,
         Options $options,
+        bool $masked,
         ?CompressionContext $compression = null
     ) {
         $this->connectedAt = \time();
@@ -74,6 +84,7 @@ final class Rfc6455Client implements Client
         $this->logger = $logger;
         $this->options = $options;
         $this->id = (int) $socket->getResource();
+        $this->masked = $masked;
         $this->compressionContext = $compression;
     }
 
@@ -321,17 +332,30 @@ final class Rfc6455Client implements Client
         return $this->socket->write($frame);
     }
 
-    private function compile(string $data, int $opcode, int $rsv, bool $fin): string
+    private function compile(string $data, int $opcode, int $rsv, bool $final): string
     {
-        $len = \strlen($data);
-        $w = \chr(($fin << 7) | ($rsv << 4) | $opcode);
+        $length = \strlen($data);
+        $w = \chr(($final << 7) | ($rsv << 4) | $opcode);
 
-        if ($len > 0xFFFF) {
-            $w .= "\x7F" . \pack('J', $len);
-        } elseif ($len > 0x7D) {
-            $w .= "\x7E" . \pack('n', $len);
+        if ($this->masked) {
+            if ($length > 0xFFFF) {
+                $w .= "\xFF" . \pack('J', $length);
+            } elseif ($length > 0x7D) {
+                $w .= "\xFE" . \pack('n', $length);
+            } else {
+                $w .= \chr($length | 0x80);
+            }
+
+            $mask = \pack('N', \random_int(\PHP_INT_MIN, \PHP_INT_MAX));
+            return $w . $mask . ($data ^ \str_repeat($mask, ($length + 3) >> 2));
+        }
+
+        if ($length > 0xFFFF) {
+            $w .= "\x7F" . \pack('J', $length);
+        } elseif ($length > 0x7D) {
+            $w .= "\x7E" . \pack('n', $length);
         } else {
-            $w .= \chr($len);
+            $w .= \chr($length);
         }
 
         return $w . $data;
@@ -347,8 +371,6 @@ final class Rfc6455Client implements Client
             $this->closeCode = $code;
             $this->closeReason = $reason;
 
-            $bytes = 0;
-
             try {
                 \assert($code !== Code::NONE || $reason === '');
                 $promise = $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
@@ -358,12 +380,9 @@ final class Rfc6455Client implements Client
                 yield from $this->tryAppOnClose($code, $reason);
 
                 $bytes = yield $promise;
-            } catch (WebsocketException $e) {
-                // Ignore client failures.
-            } catch (StreamException $e) {
-                // Ignore stream failures, closing anyway.
             } finally {
                 $this->socket->close();
+                $this->application = null;
             }
 
             return $bytes;
@@ -525,10 +544,10 @@ final class Rfc6455Client implements Client
                 }
             }
 
-            if ($frameLength > 0 && !$isMasked) {
+            if ($frameLength > 0 && $isMasked === $client->masked) {
                 $client->onError(
                     Code::PROTOCOL_ERROR,
-                    'Payload mask required'
+                    'Payload mask error'
                 );
                 return;
             }
