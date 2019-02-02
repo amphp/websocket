@@ -10,6 +10,11 @@ interface CompressionContext
     public function getRsv(): int;
 
     /**
+     * @return int Minimum number of bytes a message must be before compressing.
+     */
+    public function getCompressionThreshold(): int;
+
+    /**
      * Compress the given payload data.
      *
      * @param string $data

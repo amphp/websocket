@@ -286,7 +286,10 @@ final class Rfc6455Client implements Client
 
         $rsv = 0;
 
-        if ($this->compressionContext && $opcode === Opcode::TEXT) {
+        if ($this->compressionContext
+            && $opcode === Opcode::TEXT
+            && \strlen($data) > $this->compressionContext->getCompressionThreshold()
+        ) {
             $data = $this->compressionContext->compress($data);
             $rsv |= $this->compressionContext->getRsv();
         }
@@ -429,7 +432,8 @@ final class Rfc6455Client implements Client
         $textOnly = $options->isTextOnly();
         $doUtf8Validation = $validateUtf8 = $options->isValidateUtf8();
 
-        $compression = $client->compressionContext;
+        $compressionContext = $client->compressionContext;
+        $compressedFlag = $compressionContext->getRsv();
 
         $dataMsgBytesRecd = 0;
         $savedBuffer = '';
@@ -485,13 +489,13 @@ final class Rfc6455Client implements Client
                     return;
                 }
             } else { // Text and binary frames
-                if ($rsv !== 0 && (!$compression || $rsv & ~$compression->getRsv())) {
+                if ($rsv !== 0 && (!$compressionContext || $rsv & ~$compressedFlag)) {
                     $client->onError(Code::PROTOCOL_ERROR, 'Invalid RSV value for negotiated extensions');
                     return;
                 }
 
                 $doUtf8Validation = $validateUtf8 && $opcode === Opcode::TEXT;
-                $compressed = (bool) ($rsv & $compression->getRsv());
+                $compressed = (bool) ($rsv & $compressedFlag);
             }
 
             if ($frameLength === 0x7E) {
@@ -652,7 +656,7 @@ final class Rfc6455Client implements Client
                     continue;
                 }
 
-                $payload = $compression->decompress($payload);
+                $payload = $compressionContext->decompress($payload);
 
                 if ($payload === null) { // Decompression failed.
                     $client->onError(

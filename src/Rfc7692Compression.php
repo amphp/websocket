@@ -7,6 +7,7 @@ final class Rfc7692Compression implements CompressionContext
     public const DEFAULT_WINDOW_SIZE = 15;
 
     private const RSV = 0b100;
+    private const MINIMUM_LENGTH = 860;
     private const EMPTY_BLOCK = "\x0\x0\xff\xff";
 
     /**
@@ -121,6 +122,11 @@ final class Rfc7692Compression implements CompressionContext
     public function getRsv(): int
     {
         return self::RSV;
+    }
+
+    public function getCompressionThreshold(): int
+    {
+        return self::MINIMUM_LENGTH;
     }
 
     public function decompress(string $data): ?string
