@@ -18,7 +18,7 @@ final class Rfc7692Compression implements CompressionContext
      *
      * @return self|null
      */
-    public static function fromClientHeader(string $headerIn, string &$headerOut): ?self
+    public static function fromClientHeader(string $headerIn, ?string &$headerOut): ?self
     {
         return self::fromHeader(true, $headerIn, $headerOut);
     }
@@ -50,7 +50,7 @@ final class Rfc7692Compression implements CompressionContext
      *
      * @return self|null
      */
-    private static function fromHeader(bool $isServer, string $headerIn, string &$headerOut = null): ?self
+    private static function fromHeader(bool $isServer, string $headerIn, ?string &$headerOut = null): ?self
     {
         $headerIn = \explode(';', \strtolower($headerIn));
         $headerIn = \array_map('trim', $headerIn);
