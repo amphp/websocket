@@ -4,23 +4,23 @@ namespace Amp\Websocket;
 
 class Options
 {
-    private $streamThreshold = 32768;
-    private $frameSplitThreshold = 32768;
-    private $bytesPerSecondLimit = 8 << 16;
+    private $streamThreshold = 32768; // 32KB
+    private $frameSplitThreshold = 32768; // 32KB
+    private $bytesPerSecondLimit = 524288; // 512KB
     private $framesPerSecondLimit = 100;
-    private $maximumFrameSize = 2097152;
-    private $maximumMessageSize = 10485760;
+    private $frameSizeLimit = 2097152; // 2MB
+    private $messageSizeLimit = 10485760; // 10MB
     private $textOnly = false;
     private $validateUtf8 = true;
     private $closePeriod = 3;
     private $compressionEnabled = true;
 
-    public function getStreamThreshold(): int
+    final public function getStreamThreshold(): int
     {
         return $this->streamThreshold;
     }
 
-    public function withStreamThreshold(int $streamThreshold): self
+    final public function withStreamThreshold(int $streamThreshold): self
     {
         if ($streamThreshold < 1) {
             throw new \Error('$streamThreshold must be a positive integer greater than 0');
@@ -32,12 +32,12 @@ class Options
         return $clone;
     }
 
-    public function getFrameSplitThreshold(): int
+    final public function getFrameSplitThreshold(): int
     {
         return $this->frameSplitThreshold;
     }
 
-    public function withFrameSplitThreshold(int $frameSplitThreshold): self
+    final public function withFrameSplitThreshold(int $frameSplitThreshold): self
     {
         if ($frameSplitThreshold < 1) {
             throw new \Error('$frameSplitThreshold must be a positive integer greater than 0');
@@ -49,29 +49,29 @@ class Options
         return $clone;
     }
 
-    public function getMaximumFrameSize(): int
+    final public function getFrameSizeLimit(): int
     {
-        return $this->maximumFrameSize;
+        return $this->frameSizeLimit;
     }
 
-    public function withMaximumFrameSize(int $maximumFrameSize): self
+    final public function withFrameSizeLimit(int $frameSizeLimit): self
     {
-        if ($maximumFrameSize < 1) {
-            throw new \Error('$maximumFrameSize must be a positive integer greater than 0');
+        if ($frameSizeLimit < 1) {
+            throw new \Error('$frameSizeLimit must be a positive integer greater than 0');
         }
 
         $clone = clone $this;
-        $clone->maximumFrameSize = $maximumFrameSize;
+        $clone->frameSizeLimit = $frameSizeLimit;
 
         return $clone;
     }
 
-    public function getBytesPerSecondLimit(): int
+    final public function getBytesPerSecondLimit(): int
     {
         return $this->bytesPerSecondLimit;
     }
 
-    public function withBytesPerSecondLimit(int $bytesPerSecond): self
+    final public function withBytesPerSecondLimit(int $bytesPerSecond): self
     {
         if ($bytesPerSecond < 1) {
             throw new \Error('$bytesPerSecond must be a positive integer greater than 0');
@@ -83,12 +83,12 @@ class Options
         return $clone;
     }
 
-    public function getFramesPerSecondLimit(): int
+    final public function getFramesPerSecondLimit(): int
     {
         return $this->bytesPerSecondLimit;
     }
 
-    public function withFramesPerSecondLimit(int $framesPerSecond): self
+    final public function withFramesPerSecondLimit(int $framesPerSecond): self
     {
         if ($framesPerSecond < 1) {
             throw new \Error('$bytesPerSecond must be a positive integer greater than 0');
@@ -100,29 +100,29 @@ class Options
         return $clone;
     }
 
-    public function getMaximumMessageSize(): int
+    final public function getMessageSizeLimit(): int
     {
-        return $this->maximumMessageSize;
+        return $this->messageSizeLimit;
     }
 
-    public function withMaximumMessageSize(int $maximumMessageSize): self
+    final public function withMessageSizeLimit(int $messageSizeLimit): self
     {
-        if ($maximumMessageSize < 1) {
-            throw new \Error('$maximumMessageSize must be a positive integer greater than 0');
+        if ($messageSizeLimit < 1) {
+            throw new \Error('$messageSizeLimit must be a positive integer greater than 0');
         }
 
         $clone = clone $this;
-        $clone->maximumMessageSize = $maximumMessageSize;
+        $clone->messageSizeLimit = $messageSizeLimit;
 
         return $clone;
     }
 
-    public function isTextOnly(): bool
+    final public function isTextOnly(): bool
     {
         return $this->textOnly;
     }
 
-    public function withTextOnly(bool $textOnly): self
+    final public function withTextOnly(bool $textOnly): self
     {
         $clone = clone $this;
         $clone->textOnly = $textOnly;
@@ -130,12 +130,12 @@ class Options
         return $clone;
     }
 
-    public function isValidateUtf8(): bool
+    final public function isValidateUtf8(): bool
     {
         return $this->validateUtf8;
     }
 
-    public function withValidateUtf8(bool $validateUtf8): self
+    final public function withValidateUtf8(bool $validateUtf8): self
     {
         $clone = clone $this;
         $clone->validateUtf8 = $validateUtf8;
@@ -143,12 +143,12 @@ class Options
         return $clone;
     }
 
-    public function getClosePeriod(): int
+    final public function getClosePeriod(): int
     {
         return $this->closePeriod;
     }
 
-    public function withClosePeriod(int $closePeriod): self
+    final public function withClosePeriod(int $closePeriod): self
     {
         if ($closePeriod < 1) {
             throw new \Error('$closePeriod must be a positive integer greater than 0');
@@ -160,12 +160,12 @@ class Options
         return $clone;
     }
 
-    public function isCompressionEnabled(): bool
+    final public function isCompressionEnabled(): bool
     {
         return $this->compressionEnabled;
     }
 
-    public function withCompression(): self
+    final public function withCompression(): self
     {
         $clone = clone $this;
         $clone->compressionEnabled = true;
@@ -173,7 +173,7 @@ class Options
         return $clone;
     }
 
-    public function withoutCompression(): self
+    final public function withoutCompression(): self
     {
         $clone = clone $this;
         $clone->compressionEnabled = false;

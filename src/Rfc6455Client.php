@@ -448,8 +448,8 @@ final class Rfc6455Client implements Client
      */
     private function parser(): \Generator
     {
-        $maxFrameSize = $this->options->getMaximumFrameSize();
-        $maxMessageSize = $this->options->getMaximumMessageSize();
+        $frameSizeLimit = $this->options->getFrameSizeLimit();
+        $messageSizeLimit = $this->options->getMessageSizeLimit();
         $textOnly = $this->options->isTextOnly();
         $doUtf8Validation = $validateUtf8 = $this->options->isValidateUtf8();
 
@@ -595,7 +595,7 @@ final class Rfc6455Client implements Client
                 }
             }
 
-            if ($maxFrameSize && $frameLength > $maxFrameSize) {
+            if ($frameSizeLimit && $frameLength > $frameSizeLimit) {
                 $this->onError(
                     Code::MESSAGE_TOO_LARGE,
                     'Received payload exceeds maximum allowable size'
@@ -603,7 +603,7 @@ final class Rfc6455Client implements Client
                 return;
             }
 
-            if ($maxMessageSize && ($frameLength + $dataMsgBytesRecd) > $maxMessageSize) {
+            if ($messageSizeLimit && ($frameLength + $dataMsgBytesRecd) > $messageSizeLimit) {
                 $this->onError(
                     Code::MESSAGE_TOO_LARGE,
                     'Received payload exceeds maximum allowable size'
