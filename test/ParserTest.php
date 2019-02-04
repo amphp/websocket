@@ -66,14 +66,10 @@ class ParserTest extends TestCase
                     $this->assertSame($isBinary, $message->isBinary());
                 }
             } catch (ClosedException $exception) {
-                $this->assertSame($code, $exception->getCode());
-                $this->assertSame($reason, $exception->getReason());
+                $this->assertSame($code ?? Code::NORMAL_CLOSE, $exception->getCode());
+                $this->assertSame($reason ?? '', $exception->getReason());
                 return;
             }
-
-            $info = $client->getInfo();
-            $this->assertSame(Code::NORMAL_CLOSE, $info['close_code']);
-            $this->assertSame('', $info['close_reason']);
         });
     }
 
