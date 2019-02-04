@@ -60,9 +60,6 @@ final class Rfc6455Client implements Client
     /** @var string|null */
     private $closeReason;
 
-    /** @var bool */
-    private $peerInitiatedClose = false;
-
     private $closedAt = 0;
     private $lastReadAt = 0;
     private $lastSentAt = 0;
@@ -134,16 +131,9 @@ final class Rfc6455Client implements Client
         }
 
         if ($this->closedAt) {
-            // User kept in while loop after previous promise already resolved
-            if ($this->peerInitiatedClose) {
-                return new Failure(
-                    new ClosedException('The connection was closed by the peer', $this->closeCode, $this->closeReason)
-                );
-            }
-
-            // Might happen if close() is called outside the receive coroutine.
-            // Succeed with null instead of erroring out just as with a pending receive on close.
-            return new Success;
+            return new Failure(
+                new ClosedException('The connection was closed', $this->closeCode, $this->closeReason)
+            );
         }
 
         $this->nextMessageDeferred = new Deferred;
@@ -271,7 +261,7 @@ final class Rfc6455Client implements Client
 
                     if ($code < 1000 // Reserved and unused.
                         || ($code >= 1004 && $code <= 1006) // Should not be sent over wire.
-                        //|| ($code >= 1014 && $code <= 1016) // Should only be sent by server.
+                        || (!$this->masked && $code >= 1014 && $code <= 1016) // Should only be sent by server.
                         || ($code >= 1017 && $code <= 1999) // Reserved for future use
                         || ($code >= 2000 && $code <= 2999) // Reserved for WebSocket extensions.
                         || $code >= 5000 // 3000-3999 for libraries, 4000-4999 for applications, >= 5000 invalid.
@@ -283,8 +273,6 @@ final class Rfc6455Client implements Client
                         $reason = 'Close reason must be valid UTF-8';
                     }
                 }
-
-                $this->peerInitiatedClose = true;
 
                 $this->close($code, $reason);
                 break;
@@ -303,7 +291,6 @@ final class Rfc6455Client implements Client
 
     private function onError(int $code, string $reason): void
     {
-        $this->peerInitiatedClose = true;
         $this->close($code, $reason);
     }
 
@@ -439,12 +426,7 @@ final class Rfc6455Client implements Client
                     if ($this->nextMessageDeferred) {
                         $deferred = $this->nextMessageDeferred;
                         $this->nextMessageDeferred = null;
-
-                        if ($this->peerInitiatedClose) {
-                            $deferred->fail($exception);
-                        } else {
-                            $deferred->resolve();
-                        }
+                        $deferred->fail($exception);
                     }
                 }
 
