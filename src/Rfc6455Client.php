@@ -2,6 +2,7 @@
 
 namespace Amp\Websocket;
 
+use Amp\ByteStream\InputStream;
 use Amp\ByteStream\IteratorStream;
 use Amp\Coroutine;
 use Amp\Deferred;
@@ -352,12 +353,22 @@ final class Rfc6455Client implements Client
     public function send(string $data): Promise
     {
         \assert(\preg_match('//u', $data), 'Text data must be UTF-8');
-        return $this->lastWrite = new Coroutine($this->post($data, Opcode::TEXT));
+        return $this->lastWrite = new Coroutine($this->sendData($data, Opcode::TEXT));
     }
 
     public function sendBinary(string $data): Promise
     {
-        return $this->lastWrite = new Coroutine($this->post($data, Opcode::BIN));
+        return $this->lastWrite = new Coroutine($this->sendData($data, Opcode::BIN));
+    }
+
+    public function stream(InputStream $stream): Promise
+    {
+        return $this->lastWrite = new Coroutine($this->sendStream($stream, Opcode::TEXT));
+    }
+
+    public function streamBinary(InputStream $stream): Promise
+    {
+        return $this->lastWrite = new Coroutine($this->sendStream($stream, Opcode::BIN));
     }
 
     public function ping(): Promise
@@ -366,7 +377,7 @@ final class Rfc6455Client implements Client
         return $this->write((string) $this->pingCount, Opcode::PING);
     }
 
-    private function post(string $data, int $opcode): \Generator
+    private function sendData(string $data, int $opcode): \Generator
     {
         if ($this->lastWrite) {
             yield $this->lastWrite;
@@ -408,6 +419,27 @@ final class Rfc6455Client implements Client
         }
 
         return $bytes;
+    }
+
+    private function sendStream(InputStream $stream, int $opcode): \Generator
+    {
+        if ($this->lastWrite) {
+            yield $this->lastWrite;
+        }
+
+        $written = 0;
+
+        try {
+            while (($chunk = yield $stream->read()) !== null) {
+                $written += yield $this->write($chunk, $opcode, 0, false);
+                $opcode = Opcode::CONT;
+            }
+
+            return $written + yield $this->write('', $opcode, 0, true);
+        } catch (\Throwable $exception) {
+            yield $this->close(Code::UNEXPECTED_SERVER_ERROR, 'Error while reading message data');
+            throw $exception;
+        }
     }
 
     private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): Promise

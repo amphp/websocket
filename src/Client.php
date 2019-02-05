@@ -2,6 +2,7 @@
 
 namespace Amp\Websocket;
 
+use Amp\ByteStream\InputStream;
 use Amp\Promise;
 
 interface Client
@@ -73,6 +74,32 @@ interface Client
      * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
      */
     public function sendBinary(string $data): Promise;
+
+    /**
+     * Streams the given UTF-8 text stream to the endpoint. This method should be used only for large payloads such as
+     * files. Use send() for smaller payloads.
+     *
+     * Data will not be compressed using this method (since compressed messages require buffering the entire message
+     * before compressing).
+     *
+     * @param InputStream $stream
+     *
+     * @return Promise
+     */
+    public function stream(InputStream $stream): Promise;
+
+    /**
+     * Streams the given binary to the endpoint. This method should be used only for large payloads such as
+     * files. Use sendBinary() for smaller payloads.
+     *
+     * Data will not be compressed using this method (since compressed messages require buffering the entire message
+     * before compressing).
+     *
+     * @param InputStream $stream
+     *
+     * @return Promise
+     */
+    public function streamBinary(InputStream $stream): Promise;
 
     /**
      * Sends a ping to the endpoint.
