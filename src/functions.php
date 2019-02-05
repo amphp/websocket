@@ -3,6 +3,18 @@
 namespace Amp\Websocket;
 
 /**
+ * @param int $length Random bytes to use to generate the key.
+ *
+ * @return string
+ *
+ * @throws \Exception If generating a random key fails.
+ */
+function generateKey(int $length = 16): string
+{
+    return \base64_encode(\random_bytes($length));
+}
+
+/**
  * Generates the value for the Sec-Websocket-Accept header based on the given Sec-Websocket-Key header value.
  *
  * @param string $key
