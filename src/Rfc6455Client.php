@@ -85,7 +85,8 @@ final class Rfc6455Client implements Client
         Socket $socket,
         Options $options,
         bool $masked,
-        ?CompressionContext $compression = null
+        ?CompressionContext $compression = null,
+        string $buffer = ''
     ) {
         $this->connectedAt = \time();
 
@@ -111,7 +112,7 @@ final class Rfc6455Client implements Client
             }
         });
 
-        Promise\rethrow(new Coroutine($this->read()));
+        Promise\rethrow(new Coroutine($this->read($buffer)));
     }
 
     public function __destruct()
@@ -207,12 +208,14 @@ final class Rfc6455Client implements Client
         ];
     }
 
-    private function read(): \Generator
+    private function read(string $buffer): \Generator
     {
         $maxFramesPerSecond = $this->options->getFramesPerSecondLimit();
         $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
 
         $parser = $this->parser();
+
+        $parser->send($buffer);
 
         try {
             while (!$this->closedAt && ($chunk = yield $this->socket->read()) !== null) {
