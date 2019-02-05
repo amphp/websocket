@@ -6,21 +6,14 @@ use Amp\ByteStream\IteratorStream;
 use Amp\Coroutine;
 use Amp\Deferred;
 use Amp\Emitter;
-use Amp\Failure;
+use Amp\Loop;
 use Amp\Promise;
 use Amp\Socket\Socket;
 use Amp\Success;
-use Psr\Log\LoggerInterface as PsrLogger;
 use function Amp\call;
 
 final class Rfc6455Client implements Client
 {
-    /** @var \Generator|null */
-    private $parser;
-
-    /** @var PsrLogger */
-    private $logger;
-
     /** @var Options */
     private $options;
 
@@ -72,6 +65,15 @@ final class Rfc6455Client implements Client
     private $messagesRead = 0;
     private $messagesSent = 0;
 
+    private $framesReadInLastSecond = 0;
+    private $bytesReadInLastSecond = 0;
+
+    /** @var Deferred|null */
+    private $rateDeferred;
+
+    /** @var string */
+    private $watcher;
+
     /**
      * @param Socket                  $socket
      * @param Options                 $options
@@ -91,29 +93,29 @@ final class Rfc6455Client implements Client
         $this->id = (int) $socket->getResource();
         $this->masked = $masked;
         $this->compressionContext = $compression;
+
+        $framesReadInLastSecond = &$this->framesReadInLastSecond;
+        $bytesReadInLastSecond = &$this->bytesReadInLastSecond;
+        $rateDeferred = &$this->rateDeferred;
+        $this->watcher = Loop::repeat(1000, static function () use (
+            &$framesReadInLastSecond, &$bytesReadInLastSecond, &$rateDeferred
+        ): void {
+            $bytesReadInLastSecond = 0;
+            $framesReadInLastSecond = 0;
+
+            if ($rateDeferred !== null) {
+                $deferred = $rateDeferred;
+                $rateDeferred = null;
+                $deferred->resolve();
+            }
+        });
+
+        Promise\rethrow(new Coroutine($this->read()));
     }
 
-    public function setup(): callable
+    public function __destruct()
     {
-        if ($this->parser) {
-            throw new \Error('Client has already been setup');
-        }
-
-        $this->parser = $this->parser();
-
-        return function (string $chunk): int {
-            if ($this->closedAt) {
-                return 0;
-            }
-
-            $this->lastReadAt = \time();
-            $this->bytesRead += \strlen($chunk);
-
-            $frames = (int) $this->parser->send($chunk);
-            $this->framesRead += $frames;
-
-            return $frames;
-        };
+        Loop::cancel($this->watcher);
     }
 
     public function receive(): Promise
@@ -131,9 +133,7 @@ final class Rfc6455Client implements Client
         }
 
         if ($this->closedAt) {
-            return new Failure(
-                new ClosedException('The connection was closed', $this->closeCode, $this->closeReason)
-            );
+            return new Success;
         }
 
         $this->nextMessageDeferred = new Deferred;
@@ -166,6 +166,24 @@ final class Rfc6455Client implements Client
         return $this->socket->getRemoteAddress();
     }
 
+    public function getCloseCode(): int
+    {
+        if (!$this->closedAt) {
+            throw new \Error('The client has not closed');
+        }
+
+        return $this->closeCode;
+    }
+
+    public function getCloseReason(): string
+    {
+        if (!$this->closedAt) {
+            throw new \Error('The client has not closed');
+        }
+
+        return $this->closeReason;
+    }
+
     public function getInfo(): array
     {
         return [
@@ -186,6 +204,43 @@ final class Rfc6455Client implements Client
             'ping_count'        => $this->pingCount,
             'pong_count'        => $this->pongCount,
         ];
+    }
+
+    private function read(): \Generator
+    {
+        $maxFramesPerSecond = $this->options->getFramesPerSecondLimit();
+        $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
+
+        $parser = $this->parser();
+
+        try {
+            while (!$this->closedAt && ($chunk = yield $this->socket->read()) !== null) {
+                $frames = $parser->send($chunk);
+
+                $this->framesReadInLastSecond += $frames;
+                $this->bytesReadInLastSecond += \strlen($chunk);
+
+                $chunk = null; // Free memory from last chunk read.
+
+                if ($this->framesReadInLastSecond >= $maxFramesPerSecond) {
+                    $this->rateDeferred = new Deferred;
+                    yield $this->rateDeferred->promise();
+                } elseif ($this->bytesReadInLastSecond >= $maxBytesPerSecond) {
+                    $this->rateDeferred = new Deferred;
+                    yield $this->rateDeferred->promise();
+                }
+            }
+        } catch (\Throwable $exception) {
+            // Ignore stream exception, connection will be closed below anyway.
+        }
+
+        if (!$this->closedAt) {
+            yield $this->close(Code::ABNORMAL_CLOSE, 'Underlying TCP connection closed');
+        }
+
+        $this->socket->close();
+        $this->lastWrite = null;
+        Loop::cancel($this->watcher);
     }
 
     private function onData(int $opcode, string $data, bool $terminated): void
@@ -318,6 +373,7 @@ final class Rfc6455Client implements Client
         }
 
         ++$this->messagesSent;
+        $this->lastDataSentAt = \time();
 
         $rsv = 0;
 
@@ -333,9 +389,9 @@ final class Rfc6455Client implements Client
             $bytes = 0;
 
             if (\strlen($data) > $this->options->getFrameSplitThreshold()) {
-                $len = \strlen($data);
-                $slices = \ceil($len / $this->options->getFrameSplitThreshold());
-                $chunks = \str_split($data, \ceil($len / $slices));
+                $length = \strlen($data);
+                $slices = \ceil($length / $this->options->getFrameSplitThreshold());
+                $chunks = \str_split($data, \ceil($length / $slices));
                 $final = \array_pop($chunks);
                 foreach ($chunks as $chunk) {
                     $bytes += yield $this->write($chunk, $opcode, $rsv, false);
@@ -354,13 +410,13 @@ final class Rfc6455Client implements Client
         return $bytes;
     }
 
-    private function write(string $msg, int $opcode, int $rsv = 0, bool $fin = true): Promise
+    private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): Promise
     {
         if ($this->closedAt) {
             return new Success(0);
         }
 
-        $frame = $this->compile($msg, $opcode, $rsv, $fin);
+        $frame = $this->compile($data, $opcode, $rsv, $isFinal);
 
         ++$this->framesSent;
         $this->bytesSent += \strlen($frame);
@@ -369,30 +425,24 @@ final class Rfc6455Client implements Client
         return $this->socket->write($frame);
     }
 
-    private function compile(string $data, int $opcode, int $rsv, bool $final): string
+    private function compile(string $data, int $opcode, int $rsv, bool $isFinal): string
     {
         $length = \strlen($data);
-        $w = \chr(($final << 7) | ($rsv << 4) | $opcode);
+        $w = \chr(($isFinal << 7) | ($rsv << 4) | $opcode);
 
-        if ($this->masked) {
-            if ($length > 0xFFFF) {
-                $w .= "\xFF" . \pack('J', $length);
-            } elseif ($length > 0x7D) {
-                $w .= "\xFE" . \pack('n', $length);
-            } else {
-                $w .= \chr($length | 0x80);
-            }
-
-            $mask = \pack('N', \random_int(\PHP_INT_MIN, \PHP_INT_MAX));
-            return $w . $mask . ($data ^ \str_repeat($mask, ($length + 3) >> 2));
-        }
+        $maskFlag = $this->masked ? 0x80 : 0;
 
         if ($length > 0xFFFF) {
-            $w .= "\x7F" . \pack('J', $length);
+            $w .= \chr(0x7F | $maskFlag) . \pack('J', $length);
         } elseif ($length > 0x7D) {
-            $w .= "\x7E" . \pack('n', $length);
+            $w .= \chr(0x7E | $maskFlag) . \pack('n', $length);
         } else {
-            $w .= \chr($length);
+            $w .= \chr($length | $maskFlag);
+        }
+
+        if ($this->masked) {
+            $mask = \random_bytes(4);
+            return $w . $mask . ($data ^ \str_repeat($mask, ($length + 3) >> 2));
         }
 
         return $w . $data;
@@ -414,30 +464,22 @@ final class Rfc6455Client implements Client
 
                 $this->closedAt = \time();
 
-                if ($this->currentMessageEmitter || $this->nextMessageDeferred) {
-                    $exception = new ClosedException('Connection unexpectedly closed', $code, $reason);
-
-                    if ($this->currentMessageEmitter) {
-                        $emitter = $this->currentMessageEmitter;
-                        $this->currentMessageEmitter = null;
-                        $emitter->fail($exception);
-                    }
-
-                    if ($this->nextMessageDeferred) {
-                        $deferred = $this->nextMessageDeferred;
-                        $this->nextMessageDeferred = null;
-                        $deferred->fail($exception);
-                    }
+                if ($this->currentMessageEmitter) {
+                    $emitter = $this->currentMessageEmitter;
+                    $this->currentMessageEmitter = null;
+                    $emitter->fail(new ClosedException('Connection unexpectedly closed', $code, $reason));
                 }
 
-                $bytes = yield $promise;
-            } finally {
-                $this->socket->close();
-                $this->parser = null;
-                $this->lastWrite = null;
-            }
+                if ($this->nextMessageDeferred) {
+                    $deferred = $this->nextMessageDeferred;
+                    $this->nextMessageDeferred = null;
+                    $deferred->resolve();
+                }
 
-            return $bytes;
+                return yield $promise;
+            } catch (\Throwable $exception) {
+                return 0; // Failed to write close frame, but we were disconnecting anyway.
+            }
         });
     }
 

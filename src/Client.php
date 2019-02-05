@@ -7,12 +7,11 @@ use Amp\Promise;
 interface Client
 {
     /**
-     * Receive a message from the remote.
+     * Receive a message from the remote Websocket endpoint.
      *
-     * @return Promise<Message|null> Resolves to message sent by the remote or `null` if the connection was
-     *     closed locally.
+     * @return Promise<Message|null> Resolves to message sent by the remote.
      *
-     * @throws ClosedException Thrown if the connection is closed unexpectedly by the peer.
+     * @throws ClosedException Thrown if the connection is closed.
      */
     public function receive(): Promise;
 
@@ -43,12 +42,26 @@ interface Client
     public function getUnansweredPingCount(): int;
 
     /**
+     * @return int Client close code (generally one of those listed in Code, though not necessarily).
+     *
+     * @throws \Error Thrown if the client has not closed.
+     */
+    public function getCloseCode(): int;
+
+    /**
+     * @return string Client close reason.
+     *
+     * @throws \Error Thrown if the client has not closed.
+     */
+    public function getCloseReason(): string;
+
+    /**
      * Sends a text message to the endpoint. All data sent with this method must be valid UTF-8. Use `sendBinary()` if
      * you want to send binary data.
      *
      * @param string $data Payload to send.
      *
-     * @return Promise
+     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
      */
     public function send(string $data): Promise;
 
@@ -57,14 +70,14 @@ interface Client
      *
      * @param string $data Payload to send.
      *
-     * @return Promise
+     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
      */
     public function sendBinary(string $data): Promise;
 
     /**
      * Sends a ping to the endpoint.
      *
-     * @return Promise
+     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
      */
     public function ping(): Promise;
 
@@ -100,7 +113,7 @@ interface Client
      * @param int    $code
      * @param string $reason
      *
-     * @return Promise
+     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
      */
     public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): Promise;
 }
