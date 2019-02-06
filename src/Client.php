@@ -63,6 +63,8 @@ interface Client
      * @param string $data Payload to send.
      *
      * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
+     *
+     * @throws ClosedException Thrown if sending to the client fails.
      */
     public function send(string $data): Promise;
 
@@ -72,6 +74,8 @@ interface Client
      * @param string $data Payload to send.
      *
      * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
+     *
+     * @throws ClosedException Thrown if sending to the client fails.
      */
     public function sendBinary(string $data): Promise;
 
@@ -85,6 +89,8 @@ interface Client
      * @param InputStream $stream
      *
      * @return Promise
+     *
+     * @throws ClosedException Thrown if sending to the client fails.
      */
     public function stream(InputStream $stream): Promise;
 
@@ -98,6 +104,8 @@ interface Client
      * @param InputStream $stream
      *
      * @return Promise
+     *
+     * @throws ClosedException Thrown if sending to the client fails.
      */
     public function streamBinary(InputStream $stream): Promise;
 

@@ -4,6 +4,7 @@ namespace Amp\Websocket;
 
 use Amp\ByteStream\InputStream;
 use Amp\ByteStream\IteratorStream;
+use Amp\ByteStream\StreamException;
 use Amp\Coroutine;
 use Amp\Deferred;
 use Amp\Emitter;
@@ -446,9 +447,11 @@ final class Rfc6455Client implements Client
             } else {
                 $bytes = yield $this->write($data, $opcode, $rsv);
             }
-        } catch (\Throwable $exception) {
-            $this->close(Code::ABNORMAL_CLOSE, 'Writing to the client failed');
-            $this->lastWrite = null; // prevent storing a cyclic reference
+        } catch (StreamException $exception) {
+            $code = Code::ABNORMAL_CLOSE;
+            $reason = 'Writing to the client failed';
+            $this->close($code, $reason);
+            throw new ClosedException('Client unexpectedly closed', $code, $reason);
         }
 
         return $bytes;
@@ -468,11 +471,18 @@ final class Rfc6455Client implements Client
                 $opcode = Opcode::CONT;
             }
 
-            return $written + yield $this->write('', $opcode, 0, true);
+            $written += yield $this->write('', $opcode, 0, true);
+        } catch (StreamException $exception) {
+            $code = Code::ABNORMAL_CLOSE;
+            $reason = 'Writing to the client failed';
+            $this->close($code, $reason);
+            throw new ClosedException('Client unexpectedly closed', $code, $reason);
         } catch (\Throwable $exception) {
             yield $this->close(Code::UNEXPECTED_SERVER_ERROR, 'Error while reading message data');
             throw $exception;
         }
+
+        return $written;
     }
 
     private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): Promise
@@ -534,7 +544,7 @@ final class Rfc6455Client implements Client
                 if ($this->currentMessageEmitter) {
                     $emitter = $this->currentMessageEmitter;
                     $this->currentMessageEmitter = null;
-                    $emitter->fail(new ClosedException('Connection unexpectedly closed', $code, $reason));
+                    $emitter->fail(new ClosedException('Connection closed while streaming message body', $code, $reason));
                 }
 
                 if ($this->nextMessageDeferred) {
