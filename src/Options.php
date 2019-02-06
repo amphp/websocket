@@ -6,7 +6,7 @@ class Options
 {
     private $streamThreshold = 32768; // 32KB
     private $frameSplitThreshold = 32768; // 32KB
-    private $bytesPerSecondLimit = 524288; // 512KB
+    private $bytesPerSecondLimit = 1048576; // 1MB
     private $framesPerSecondLimit = 100;
     private $frameSizeLimit = 2097152; // 2MB
     private $messageSizeLimit = 10485760; // 10MB

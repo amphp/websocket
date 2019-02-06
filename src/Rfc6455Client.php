@@ -27,6 +27,12 @@ final class Rfc6455Client implements Client
     /** @var \Amp\Promise|null */
     private $lastWrite;
 
+    /** @var Promise|null */
+    private $lastEmit;
+
+    /** @var string */
+    private $emitBuffer = '';
+
     /** @var bool */
     private $masked;
 
@@ -72,6 +78,9 @@ final class Rfc6455Client implements Client
     /** @var Deferred|null */
     private $rateDeferred;
 
+    /** @var Deferred */
+    private $closeDeferred;
+
     /** @var string */
     private $watcher;
 
@@ -80,6 +89,7 @@ final class Rfc6455Client implements Client
      * @param Options                 $options
      * @param bool                    $masked True for client, false for server.
      * @param CompressionContext|null $compression
+     * @param string                  $buffer Initial data after the websocket handshake to be parsed.
      */
     public function __construct(
         Socket $socket,
@@ -95,6 +105,8 @@ final class Rfc6455Client implements Client
         $this->id = (int) $socket->getResource();
         $this->masked = $masked;
         $this->compressionContext = $compression;
+
+        $this->closeDeferred = new Deferred;
 
         $framesReadInLastSecond = &$this->framesReadInLastSecond;
         $bytesReadInLastSecond = &$this->bytesReadInLastSecond;
@@ -233,9 +245,19 @@ final class Rfc6455Client implements Client
                     $this->rateDeferred = new Deferred;
                     yield $this->rateDeferred->promise();
                 }
+
+                if ($this->lastEmit) {
+                    yield $this->lastEmit;
+                }
             }
         } catch (\Throwable $exception) {
             // Ignore stream exception, connection will be closed below anyway.
+        }
+
+        if ($this->closeDeferred !== null) {
+            $deferred = $this->closeDeferred;
+            $this->closeDeferred = null;
+            $deferred->resolve();
         }
 
         if (!$this->closedAt) {
@@ -283,7 +305,13 @@ final class Rfc6455Client implements Client
             return;
         }
 
-        $this->currentMessageEmitter->emit($data);
+        $this->emitBuffer .= $data;
+
+        if ($terminated || \strlen($this->emitBuffer) >= $this->options->getStreamThreshold()) {
+            $promise = $this->currentMessageEmitter->emit($this->emitBuffer);
+            $this->lastEmit = $this->nextMessageDeferred ? null : $promise;
+            $this->emitBuffer = '';
+        }
 
         if ($terminated) {
             $emitter = $this->currentMessageEmitter;
@@ -303,6 +331,12 @@ final class Rfc6455Client implements Client
 
         switch ($opcode) {
             case Opcode::CLOSE:
+                if ($this->closeDeferred) {
+                    $deferred = $this->closeDeferred;
+                    $this->closeDeferred = null;
+                    $deferred->resolve();
+                }
+
                 if ($this->closedAt) {
                     break;
                 }
@@ -493,6 +527,8 @@ final class Rfc6455Client implements Client
             $this->closeCode = $code;
             $this->closeReason = $reason;
 
+            $bytes = 0;
+
             try {
                 \assert($code !== Code::NONE || $reason === '');
                 $promise = $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
@@ -511,10 +547,16 @@ final class Rfc6455Client implements Client
                     $deferred->resolve();
                 }
 
-                return yield $promise;
+                $bytes = yield $promise;
+
+                if ($this->closeDeferred !== null) {
+                    yield Promise\timeout($this->closeDeferred->promise(), $this->options->getClosePeriod() * 1000);
+                }
             } catch (\Throwable $exception) {
-                return 0; // Failed to write close frame, but we were disconnecting anyway.
+                // Failed to write close frame or to receive response frame, but we were disconnecting anyway.
             }
+
+            return $bytes;
         });
     }
 
