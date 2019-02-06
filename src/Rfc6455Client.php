@@ -246,7 +246,7 @@ final class Rfc6455Client implements Client
                     yield $this->rateDeferred->promise();
                 }
 
-                if ($this->lastEmit) {
+                if ($this->lastEmit && !$this->closedAt) {
                     yield $this->lastEmit;
                 }
             }
@@ -263,10 +263,6 @@ final class Rfc6455Client implements Client
         if (!$this->closedAt) {
             yield $this->close(Code::ABNORMAL_CLOSE, 'Underlying TCP connection closed');
         }
-
-        $this->socket->close();
-        $this->lastWrite = null;
-        Loop::cancel($this->watcher);
     }
 
     private function onData(int $opcode, string $data, bool $terminated): void
@@ -555,6 +551,10 @@ final class Rfc6455Client implements Client
             } catch (\Throwable $exception) {
                 // Failed to write close frame or to receive response frame, but we were disconnecting anyway.
             }
+
+            $this->socket->close();
+            $this->lastWrite = null;
+            Loop::cancel($this->watcher);
 
             return $bytes;
         });
