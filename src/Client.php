@@ -28,14 +28,37 @@ interface Client
     public function isConnected(): bool;
 
     /**
-     * @return string The local IP address of the client.
+     * @return string The local IP address or unix socket path of the client.
      */
     public function getLocalAddress(): string;
 
     /**
-     * @return string The remote IP address of the client.
+     * @return int|null The local port or null for unix sockets.
+     */
+    public function getLocalPort(): ?int;
+
+    /**
+     * @return string The remote IP address or unix socket path of the client.
      */
     public function getRemoteAddress(): string;
+
+    /**
+     * @return int|null The remote port or null for unix sockets.
+     */
+    public function getRemotePort(): ?int;
+
+    /**
+     * @return bool `true` if the client is encrypted, `false` if plaintext.
+     */
+    public function isEncrypted(): bool;
+
+    /**
+     * If the client is encrypted, returns the array returned from stream_get_meta_data($this->socket)["crypto"].
+     * Otherwise returns an empty array.
+     *
+     * @return array
+     */
+    public function getCryptoContext(): array;
 
     /**
      * @return int Number of pings sent that have not been answered.
@@ -121,6 +144,11 @@ interface Client
      *
      * ```
      * [
+     *     'local_address' => string,
+     *     'local_port' => int|null
+     *     'remote_address' => string,
+     *     'remote_port' => int|null,
+     *     'is_encrypted' => bool,
      *     'bytes_read' => int,
      *     'bytes_sent' => int,
      *     'frames_read' => int,
@@ -135,6 +163,7 @@ interface Client
      *     'last_sent_at' => int,
      *     'last_data_read_at' => int,
      *     'last_data_sent_at' => int,
+     *     'compression_enabled' => bool,
      * ]
      * ```
      *

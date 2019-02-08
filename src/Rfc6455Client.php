@@ -76,6 +76,14 @@ final class Rfc6455Client implements Client
     private $framesReadInLastSecond = 0;
     private $bytesReadInLastSecond = 0;
 
+    private $localAddress;
+    private $localPort;
+    private $remoteAddress;
+    private $remotePort;
+
+    /** @var mixed[] Array from stream_get_meta_data($this->socket)["crypto"] or an empty array. */
+    private $cryptoInfo;
+
     /** @var Deferred|null */
     private $rateDeferred;
 
@@ -103,11 +111,32 @@ final class Rfc6455Client implements Client
 
         $this->socket = $socket;
         $this->options = $options;
-        $this->id = (int) $socket->getResource();
         $this->masked = $masked;
         $this->compressionContext = $compression;
 
+        $resource = $socket->getResource();
+        $this->id = (int) $resource;
+
+        $this->cryptoInfo = \stream_get_meta_data($resource)["crypto"] ?? [];
+
         $this->closeDeferred = new Deferred;
+
+        $localName = (string) $this->socket->getLocalAddress();
+        if ($portStartPos = \strrpos($localName, ":")) {
+            $this->localAddress = \substr($localName, 0, $portStartPos);
+            $this->localPort = (int) \substr($localName, $portStartPos + 1);
+        } else {
+            $this->localAddress = $localName;
+        }
+
+        $remoteName = (string) $this->socket->getRemoteAddress();
+        if ($portStartPos = \strrpos($remoteName, ":")) {
+            $this->remoteAddress = \substr($remoteName, 0, $portStartPos);
+            $this->remotePort = (int) \substr($remoteName, $portStartPos + 1);
+        } else {
+            $this->remoteAddress = $localName;
+        }
+
 
         $framesReadInLastSecond = &$this->framesReadInLastSecond;
         $bytesReadInLastSecond = &$this->bytesReadInLastSecond;
@@ -173,12 +202,32 @@ final class Rfc6455Client implements Client
 
     public function getLocalAddress(): string
     {
-        return $this->socket->getLocalAddress();
+        return $this->localAddress;
+    }
+
+    public function getLocalPort(): ?int
+    {
+        return $this->localPort;
     }
 
     public function getRemoteAddress(): string
     {
-        return $this->socket->getRemoteAddress();
+        return $this->remoteAddress;
+    }
+
+    public function getRemotePort(): ?int
+    {
+        return $this->remotePort;
+    }
+
+    public function isEncrypted(): bool
+    {
+        return !empty($this->cryptoInfo);
+    }
+
+    public function getCryptoContext(): array
+    {
+        return $this->cryptoInfo;
     }
 
     public function getCloseCode(): int
@@ -202,22 +251,28 @@ final class Rfc6455Client implements Client
     public function getInfo(): array
     {
         return [
-            'bytes_read'        => $this->bytesRead,
-            'bytes_sent'        => $this->bytesSent,
-            'frames_read'       => $this->framesRead,
-            'frames_sent'       => $this->framesSent,
-            'messages_read'     => $this->messagesRead,
-            'messages_sent'     => $this->messagesSent,
-            'connected_at'      => $this->connectedAt,
-            'closed_at'         => $this->closedAt,
-            'close_code'        => $this->closeCode,
-            'close_reason'      => $this->closeReason,
-            'last_read_at'      => $this->lastReadAt,
-            'last_sent_at'      => $this->lastSentAt,
+            'local_address' => $this->localAddress,
+            'local_port' => $this->localPort,
+            'remote_address' => $this->remoteAddress,
+            'remote_port' => $this->remotePort,
+            'is_encrypted' => !empty($this->cryptoInfo),
+            'bytes_read' => $this->bytesRead,
+            'bytes_sent' => $this->bytesSent,
+            'frames_read' => $this->framesRead,
+            'frames_sent' => $this->framesSent,
+            'messages_read' => $this->messagesRead,
+            'messages_sent' => $this->messagesSent,
+            'connected_at' => $this->connectedAt,
+            'closed_at' => $this->closedAt,
+            'close_code' => $this->closeCode,
+            'close_reason' => $this->closeReason,
+            'last_read_at' => $this->lastReadAt,
+            'last_sent_at' => $this->lastSentAt,
             'last_data_read_at' => $this->lastDataReadAt,
             'last_data_sent_at' => $this->lastDataSentAt,
-            'ping_count'        => $this->pingCount,
-            'pong_count'        => $this->pongCount,
+            'ping_count' => $this->pingCount,
+            'pong_count' => $this->pongCount,
+            'compression_enabled' => $this->compressionContext !== null,
         ];
     }
 
@@ -232,6 +287,8 @@ final class Rfc6455Client implements Client
 
         try {
             while (!$this->closedAt && ($chunk = yield $this->socket->read()) !== null) {
+                $this->lastReadAt = \time();
+
                 $frames = $parser->send($chunk);
 
                 $this->framesReadInLastSecond += $frames;
