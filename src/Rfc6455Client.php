@@ -55,6 +55,9 @@ final class Rfc6455Client implements Client
     /** @var int */
     private $connectedAt;
 
+    /** @var bool */
+    private $peerInitiatedClose = false;
+
     /** @var int|null */
     private $closeCode;
 
@@ -248,6 +251,15 @@ final class Rfc6455Client implements Client
         return $this->closeReason;
     }
 
+    public function didPeerInitiateClose(): bool
+    {
+        if (!$this->closedAt) {
+            throw new \Error('The client has not closed');
+        }
+
+        return $this->peerInitiatedClose;
+    }
+
     public function getInfo(): array
     {
         return [
@@ -266,6 +278,7 @@ final class Rfc6455Client implements Client
             'closed_at' => $this->closedAt,
             'close_code' => $this->closeCode,
             'close_reason' => $this->closeReason,
+            'peer_initiated_close' => $this->peerInitiatedClose,
             'last_read_at' => $this->lastReadAt,
             'last_sent_at' => $this->lastSentAt,
             'last_data_read_at' => $this->lastDataReadAt,
@@ -394,6 +407,8 @@ final class Rfc6455Client implements Client
                 if ($this->closedAt) {
                     break;
                 }
+
+                $this->peerInitiatedClose = true;
 
                 $length = \strlen($data);
                 if ($length === 0) {

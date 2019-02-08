@@ -80,6 +80,13 @@ interface Client
     public function getCloseReason(): string;
 
     /**
+     * @return bool True if the peer initiated the websocket close.
+     *
+     * @throws \Error Thrown if the client has not closed.
+     */
+    public function didPeerInitiateClose(): bool;
+
+    /**
      * Sends a text message to the endpoint. All data sent with this method must be valid UTF-8. Use `sendBinary()` if
      * you want to send binary data.
      *
@@ -159,6 +166,7 @@ interface Client
      *     'closed_at' => int,
      *     'close_code' => int|null,
      *     'close_reason' => string|null,
+     *     'peer_initiated_close' => bool,
      *     'last_read_at' => int,
      *     'last_sent_at' => int,
      *     'last_data_read_at' => int,
