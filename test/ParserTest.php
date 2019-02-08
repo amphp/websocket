@@ -189,6 +189,26 @@ class ParserTest extends TestCase
         $input = static::compile(Opcode::TEXT, false, \substr($data, 0, 32768)) . static::compile(Opcode::PING, true, "foo") . static::compile(Opcode::CONT, true, \substr($data, 32768));
         $return[] = [$input, $data, false];
 
+        // 40 ---- close frame -------------------------------------------------------------------->
+
+        $input = static::compile(Opcode::CLOSE, true);
+        $return[] = [$input, null, true, '', Code::NONE];
+
+        // 41 ---- invalid close code ------------------------------------------------------------->
+
+        $input = static::compile(Opcode::CLOSE, true, \pack('n', 5000));
+        $return[] = [$input, null, true, "Invalid close code", Code::PROTOCOL_ERROR];
+
+        // 42 ---- invalid close payload ---------------------------------------------------------->
+
+        $input = static::compile(Opcode::CLOSE, true, "0");
+        $return[] = [$input, null, true, "Close code must be two bytes", Code::PROTOCOL_ERROR];
+
+        // 43 ---- pong frame --------------------------------------------------------------------->
+
+        $input = static::compile(Opcode::PONG, true, "\1");
+        $return[] = [$input, null, true, "Underlying TCP connection closed", Code::ABNORMAL_CLOSE];
+
         // x -------------------------------------------------------------------------------------->
 
         return $return;
