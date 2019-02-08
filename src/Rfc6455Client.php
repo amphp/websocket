@@ -96,6 +96,9 @@ final class Rfc6455Client implements Client
     /** @var string */
     private $watcher;
 
+    /** @var int Current timestamp. */
+    private $now;
+
     /**
      * @param Socket                  $socket
      * @param Options                 $options
@@ -110,7 +113,8 @@ final class Rfc6455Client implements Client
         ?CompressionContext $compression = null,
         string $buffer = ''
     ) {
-        $this->connectedAt = \time();
+        $this->now = \time();
+        $this->connectedAt = $this->now;
 
         $this->socket = $socket;
         $this->options = $options;
@@ -140,13 +144,15 @@ final class Rfc6455Client implements Client
             $this->remoteAddress = $localName;
         }
 
-
+        $now = &$this->now;
         $framesReadInLastSecond = &$this->framesReadInLastSecond;
         $bytesReadInLastSecond = &$this->bytesReadInLastSecond;
         $rateDeferred = &$this->rateDeferred;
         $this->watcher = Loop::repeat(1000, static function () use (
-            &$framesReadInLastSecond, &$bytesReadInLastSecond, &$rateDeferred
+            &$now, &$framesReadInLastSecond, &$bytesReadInLastSecond, &$rateDeferred
         ): void {
+            $now = \time();
+
             $bytesReadInLastSecond = 0;
             $framesReadInLastSecond = 0;
 
@@ -300,7 +306,7 @@ final class Rfc6455Client implements Client
 
         try {
             while (!$this->closedAt && ($chunk = yield $this->socket->read()) !== null) {
-                $this->lastReadAt = \time();
+                $this->lastReadAt = $this->now;
 
                 $frames = $parser->send($chunk);
 
@@ -343,7 +349,7 @@ final class Rfc6455Client implements Client
             return;
         }
 
-        $this->lastDataReadAt = \time();
+        $this->lastDataReadAt = $this->now;
 
         if (!$this->currentMessageEmitter) {
             if ($opcode === Opcode::CONT) {
@@ -446,7 +452,7 @@ final class Rfc6455Client implements Client
             case Opcode::PONG:
                 // We need a min() here, else someone might just send a pong frame with a very high pong count and
                 // leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
-                $this->pongCount = \min($this->pingCount, $data);
+                $this->pongCount = \min($this->pingCount, (int) $data);
                 break;
         }
     }
@@ -490,7 +496,7 @@ final class Rfc6455Client implements Client
         }
 
         ++$this->messagesSent;
-        $this->lastDataSentAt = \time();
+        $this->lastDataSentAt = $this->now;
 
         $rsv = 0;
 
@@ -567,7 +573,7 @@ final class Rfc6455Client implements Client
 
         ++$this->framesSent;
         $this->bytesSent += \strlen($frame);
-        $this->lastSentAt = \time();
+        $this->lastSentAt = $this->now;
 
         return $this->socket->write($frame);
     }
@@ -611,7 +617,7 @@ final class Rfc6455Client implements Client
                 \assert($code !== Code::NONE || $reason === '');
                 $promise = $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
 
-                $this->closedAt = \time();
+                $this->closedAt = $this->now;
 
                 if ($this->currentMessageEmitter) {
                     $emitter = $this->currentMessageEmitter;
