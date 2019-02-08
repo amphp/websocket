@@ -295,17 +295,19 @@ final class Rfc6455Client implements Client
         ];
     }
 
-    private function read(string $buffer): \Generator
+    private function read(string $chunk): \Generator
     {
         $maxFramesPerSecond = $this->options->getFramesPerSecondLimit();
         $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
 
         $parser = $this->parser();
 
-        $parser->send($buffer);
-
         try {
-            while (!$this->closedAt && ($chunk = yield $this->socket->read()) !== null) {
+            do {
+                if ($chunk === '') {
+                    continue;
+                }
+
                 $this->lastReadAt = $this->now;
 
                 $frames = $parser->send($chunk);
@@ -313,7 +315,7 @@ final class Rfc6455Client implements Client
                 $this->framesReadInLastSecond += $frames;
                 $this->bytesReadInLastSecond += \strlen($chunk);
 
-                $chunk = null; // Free memory from last chunk read.
+                $chunk = ''; // Free memory from last chunk read.
 
                 if ($this->framesReadInLastSecond >= $maxFramesPerSecond) {
                     $this->rateDeferred = new Deferred;
@@ -326,7 +328,7 @@ final class Rfc6455Client implements Client
                 if ($this->lastEmit && !$this->closedAt) {
                     yield $this->lastEmit;
                 }
-            }
+            } while (($chunk = yield $this->socket->read()) !== null);
         } catch (\Throwable $exception) {
             // Ignore stream exception, connection will be closed below anyway.
         }
