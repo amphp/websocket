@@ -562,21 +562,42 @@ final class Rfc6455Client implements Client
             $compress = true;
         }
 
-        $written = 0;
-
         try {
-            while (($chunk = yield $stream->read()) !== null) {
-                if ($compress) {
-                    $chunk = $this->compressionContext->compress($chunk, false);
-                }
+            $buffer = yield $stream->read();
 
-                $written += yield $this->write($chunk, $opcode, $rsv, false);
-                $opcode = Opcode::CONT;
-                $rsv = 0; // RSV must be 0 in continuation frames.
+            if ($buffer === null) {
+                return yield $this->write('', $opcode, 0, true);
             }
 
-            $chunk = $compress ? $this->compressionContext->compress('', true) : '';
-            $written += yield $this->write($chunk, $opcode, $rsv, true);
+            $written = 0;
+            $streamThreshold = $this->options->getStreamThreshold();
+
+            while (($chunk = yield $stream->read()) !== null) {
+                if ($chunk === '') {
+                    continue;
+                }
+
+                if (\strlen($buffer) < $streamThreshold) {
+                    $buffer .= $chunk;
+                    continue;
+                }
+
+                if ($compress) {
+                    $buffer = $this->compressionContext->compress($buffer, false);
+                }
+
+                $written += yield $this->write($buffer, $opcode, $rsv, false);
+                $opcode = Opcode::CONT;
+                $rsv = 0; // RSV must be 0 in continuation frames.
+
+                $buffer = $chunk;
+            }
+
+            if ($compress) {
+                $buffer = $this->compressionContext->compress($buffer, true);
+            }
+
+            $written += yield $this->write($buffer, $opcode, $rsv, true);
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
