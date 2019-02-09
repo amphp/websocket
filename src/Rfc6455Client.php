@@ -501,13 +501,14 @@ final class Rfc6455Client implements Client
         $this->lastDataSentAt = $this->now;
 
         $rsv = 0;
+        $compress = false;
 
         if ($this->compressionContext
             && $opcode === Opcode::TEXT
             && \strlen($data) > $this->compressionContext->getCompressionThreshold()
         ) {
-            $data = $this->compressionContext->compress($data);
             $rsv |= $this->compressionContext->getRsv();
+            $compress = true;
         }
 
         try {
@@ -515,17 +516,27 @@ final class Rfc6455Client implements Client
 
             if (\strlen($data) > $this->options->getFrameSplitThreshold()) {
                 $length = \strlen($data);
-                $slices = \ceil($length / $this->options->getFrameSplitThreshold());
-                $chunks = \str_split($data, \ceil($length / $slices));
-                $final = \array_pop($chunks);
-                foreach ($chunks as $chunk) {
-                    $bytes += yield $this->write($chunk, $opcode, $rsv, false);
+                $slices = (int) \ceil($length / $this->options->getFrameSplitThreshold());
+                $length = (int) \ceil($length / $slices);
+
+                while ($data !== '') {
+                    $chunk = \substr($data, 0, $length);
+                    $data = (string) \substr($data, $length);
+
+                    if ($compress) {
+                        $chunk = $this->compressionContext->compress($chunk, $data === '');
+                    }
+
+                    $bytes += yield $this->write($chunk, $opcode, $rsv, $data === '');
                     $opcode = Opcode::CONT;
                     $rsv = 0; // RSV must be 0 in continuation frames.
                 }
-                $bytes += yield $this->write($final, $opcode, $rsv, true);
             } else {
-                $bytes = yield $this->write($data, $opcode, $rsv);
+                if ($compress) {
+                    $data = $this->compressionContext->compress($data, true);
+                }
+
+                $bytes = yield $this->write($data, $opcode, $rsv, true);
             }
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
@@ -543,15 +554,29 @@ final class Rfc6455Client implements Client
             yield $this->lastWrite;
         }
 
+        $rsv = 0;
+        $compress = false;
+
+        if ($this->compressionContext && $opcode === Opcode::TEXT) {
+            $rsv |= $this->compressionContext->getRsv();
+            $compress = true;
+        }
+
         $written = 0;
 
         try {
             while (($chunk = yield $stream->read()) !== null) {
-                $written += yield $this->write($chunk, $opcode, 0, false);
+                if ($compress) {
+                    $chunk = $this->compressionContext->compress($chunk, false);
+                }
+
+                $written += yield $this->write($chunk, $opcode, $rsv, false);
                 $opcode = Opcode::CONT;
+                $rsv = 0; // RSV must be 0 in continuation frames.
             }
 
-            $written += yield $this->write('', $opcode, 0, true);
+            $chunk = $compress ? $this->compressionContext->compress('', true) : '';
+            $written += yield $this->write($chunk, $opcode, $rsv, true);
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
@@ -667,7 +692,6 @@ final class Rfc6455Client implements Client
 
         $dataMsgBytesRecd = 0;
         $savedBuffer = '';
-        $savedOpcode = null;
         $compressed = false;
 
         $buffer = yield;
@@ -875,18 +899,7 @@ final class Rfc6455Client implements Client
             }
 
             if ($compressed) {
-                if (!$final) {
-                    $savedBuffer = $payload;
-                    $frames++;
-
-                    if ($opcode !== Opcode::CONT) {
-                        $savedOpcode = $opcode;
-                    }
-
-                    continue;
-                }
-
-                $payload = $compressionContext->decompress($payload);
+                $payload = $compressionContext->decompress($payload, $final);
 
                 if ($payload === null) { // Decompression failed.
                     $this->onError(
@@ -920,11 +933,8 @@ final class Rfc6455Client implements Client
                 }
             }
 
-            $opcode = $savedOpcode ?? $opcode;
-
             if ($final) {
                 $dataMsgBytesRecd = 0;
-                $savedOpcode = null;
             }
 
             $this->onData($opcode, $payload, $final);

@@ -167,9 +167,13 @@ final class Rfc7692Compression implements CompressionContext
         return self::MINIMUM_LENGTH;
     }
 
-    public function decompress(string $data): ?string
+    public function decompress(string $data, bool $isFinal): ?string
     {
-        $data = \inflate_add($this->inflate, $data . self::EMPTY_BLOCK, $this->receivingFlushMode);
+        if ($isFinal) {
+            $data .= self::EMPTY_BLOCK;
+        }
+
+        $data = \inflate_add($this->inflate, $data, $this->receivingFlushMode);
 
         if (false === $data) {
             return null;
@@ -178,15 +182,14 @@ final class Rfc7692Compression implements CompressionContext
         return $data;
     }
 
-    public function compress(string $data): string
+    public function compress(string $data, bool $isFinal): string
     {
         $data = \deflate_add($this->deflate, $data, $this->sendingFlushMode);
         if ($data === false) {
             throw new \RuntimeException('Failed to compress data');
         }
 
-        // @TODO Is this always true?
-        if (\substr($data, -4) === self::EMPTY_BLOCK) {
+        if ($isFinal && \substr($data, -4) === self::EMPTY_BLOCK) {
             $data = \substr($data, 0, -4);
         }
 
