@@ -431,8 +431,8 @@ final class Rfc6455Client implements Client
 
                     if ($code < 1000 // Reserved and unused.
                         || ($code >= 1004 && $code <= 1006) // Should not be sent over wire.
-                        || (!$this->masked && $code >= 1014 && $code <= 1016) // Should only be sent by server.
-                        || ($code >= 1017 && $code <= 1999) // Reserved for future use
+                        || ($code >= 1014 && $code <= 1015) // Should not be sent over wire.
+                        || ($code >= 1016 && $code <= 1999) // Reserved for future use
                         || ($code >= 2000 && $code <= 2999) // Reserved for WebSocket extensions.
                         || $code >= 5000 // 3000-3999 for libraries, 4000-4999 for applications, >= 5000 invalid.
                     ) {
