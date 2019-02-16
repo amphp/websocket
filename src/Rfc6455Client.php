@@ -309,11 +309,9 @@ final class Rfc6455Client implements Client
                 }
 
                 $this->lastReadAt = $this->now;
-
-                $frames = $parser->send($chunk);
-
-                $this->framesReadInLastSecond += $frames;
                 $this->bytesReadInLastSecond += \strlen($chunk);
+
+                $parser->send($chunk);
 
                 $chunk = ''; // Free memory from last chunk read.
 
@@ -352,6 +350,8 @@ final class Rfc6455Client implements Client
         }
 
         $this->lastDataReadAt = $this->now;
+        ++$this->framesRead;
+        ++$this->framesReadInLastSecond;
 
         if (!$this->currentMessageEmitter) {
             if ($opcode === Opcode::CONT) {
@@ -403,6 +403,9 @@ final class Rfc6455Client implements Client
         if ($this->closedAt) {
             return;
         }
+
+        ++$this->framesRead;
+        ++$this->framesReadInLastSecond;
 
         switch ($opcode) {
             case Opcode::CLOSE:
@@ -541,7 +544,7 @@ final class Rfc6455Client implements Client
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
-            $this->close($code, $reason);
+            yield $this->close($code, $reason);
             throw new ClosedException('Client unexpectedly closed', $code, $reason);
         }
 
@@ -601,7 +604,7 @@ final class Rfc6455Client implements Client
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
-            $this->close($code, $reason);
+            yield $this->close($code, $reason);
             throw new ClosedException('Client unexpectedly closed', $code, $reason);
         } catch (\Throwable $exception) {
             yield $this->close(Code::UNEXPECTED_SERVER_ERROR, 'Error while reading message data');
@@ -718,19 +721,15 @@ final class Rfc6455Client implements Client
         $buffer = yield;
         $offset = 0;
         $bufferSize = \strlen($buffer);
-        $frames = 0;
 
         while (true) {
             $payload = ''; // Free memory from last frame payload.
 
-            if ($bufferSize < 2) {
+            while ($bufferSize < 2) {
                 $buffer = \substr($buffer, $offset);
                 $offset = 0;
-                do {
-                    $buffer .= yield $frames;
-                    $bufferSize = \strlen($buffer);
-                    $frames = 0;
-                } while ($bufferSize < 2);
+                $buffer .= yield;
+                $bufferSize = \strlen($buffer);
             }
 
             $firstByte = \ord($buffer[$offset]);
@@ -774,35 +773,29 @@ final class Rfc6455Client implements Client
             }
 
             if ($frameLength === 0x7E) {
-                if ($bufferSize < 2) {
+                while ($bufferSize < 2) {
                     $buffer = \substr($buffer, $offset);
                     $offset = 0;
-                    do {
-                        $buffer .= yield $frames;
-                        $bufferSize = \strlen($buffer);
-                        $frames = 0;
-                    } while ($bufferSize < 2);
+                    $buffer .= yield;
+                    $bufferSize = \strlen($buffer);
                 }
 
                 $frameLength = \unpack('n', $buffer[$offset] . $buffer[$offset + 1])[1];
                 $offset += 2;
                 $bufferSize -= 2;
             } elseif ($frameLength === 0x7F) {
-                if ($bufferSize < 8) {
+                while ($bufferSize < 8) {
                     $buffer = \substr($buffer, $offset);
                     $offset = 0;
-                    do {
-                        $buffer .= yield $frames;
-                        $bufferSize = \strlen($buffer);
-                        $frames = 0;
-                    } while ($bufferSize < 8);
+                    $buffer .= yield;
+                    $bufferSize = \strlen($buffer);
                 }
 
                 $lengthLong32Pair = \unpack('N2', \substr($buffer, $offset, 8));
                 $offset += 8;
                 $bufferSize -= 8;
 
-                if (PHP_INT_MAX === 0x7fffffff) {
+                if (\PHP_INT_MAX === 0x7fffffff) {
                     if ($lengthLong32Pair[1] !== 0 || $lengthLong32Pair[2] < 0) {
                         $this->onError(
                             Code::MESSAGE_TOO_LARGE,
@@ -874,14 +867,11 @@ final class Rfc6455Client implements Client
             }
 
             if ($isMasked) {
-                if ($bufferSize < 4) {
+                while ($bufferSize < 4) {
                     $buffer = \substr($buffer, $offset);
                     $offset = 0;
-                    do {
-                        $buffer .= yield $frames;
-                        $bufferSize = \strlen($buffer);
-                        $frames = 0;
-                    } while ($bufferSize < 4);
+                    $buffer .= yield;
+                    $bufferSize = \strlen($buffer);
                 }
 
                 $maskingKey = \substr($buffer, $offset, 4);
@@ -890,15 +880,15 @@ final class Rfc6455Client implements Client
             }
 
             while ($bufferSize < $frameLength) {
-                $chunk = yield $frames;
+                $chunk = yield;
                 $buffer .= $chunk;
                 $bufferSize += \strlen($chunk);
-                $frames = 0;
             }
 
             $payload = \substr($buffer, $offset, $frameLength);
-            $offset += $frameLength;
-            $bufferSize -= $frameLength;
+            $buffer = \substr($buffer, $offset + $frameLength);
+            $offset = 0;
+            $bufferSize = \strlen($buffer);
 
             if ($isMasked) {
                 // This is memory hungry but it's ~70x faster than iterating byte-by-byte
@@ -908,7 +898,6 @@ final class Rfc6455Client implements Client
 
             if ($isControlFrame) {
                 $this->onControlFrame($opcode, $payload);
-                $frames++;
                 continue;
             }
 
@@ -959,7 +948,6 @@ final class Rfc6455Client implements Client
             }
 
             $this->onData($opcode, $payload, $final);
-            $frames++;
         }
     }
 }
