@@ -104,14 +104,12 @@ final class Rfc6455Client implements Client
      * @param Options                 $options
      * @param bool                    $masked True for client, false for server.
      * @param CompressionContext|null $compression
-     * @param string                  $buffer Initial data after the websocket handshake to be parsed.
      */
     public function __construct(
         Socket $socket,
         Options $options,
         bool $masked,
-        ?CompressionContext $compression = null,
-        string $buffer = ''
+        ?CompressionContext $compression = null
     ) {
         $this->now = \time();
         $this->connectedAt = $this->now;
@@ -163,7 +161,7 @@ final class Rfc6455Client implements Client
             }
         });
 
-        Promise\rethrow(new Coroutine($this->read($buffer)));
+        Promise\rethrow(new Coroutine($this->read()));
     }
 
     public function __destruct()
@@ -295,7 +293,7 @@ final class Rfc6455Client implements Client
         ];
     }
 
-    private function read(string $chunk): \Generator
+    private function read(): \Generator
     {
         $maxFramesPerSecond = $this->options->getFramesPerSecondLimit();
         $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
@@ -303,7 +301,7 @@ final class Rfc6455Client implements Client
         $parser = $this->parser();
 
         try {
-            do {
+            while (($chunk = yield $this->socket->read()) !== null) {
                 if ($chunk === '') {
                     continue;
                 }
@@ -326,7 +324,7 @@ final class Rfc6455Client implements Client
                 if ($this->lastEmit && !$this->closedAt) {
                     yield $this->lastEmit;
                 }
-            } while (($chunk = yield $this->socket->read()) !== null);
+            }
         } catch (\Throwable $exception) {
             // Ignore stream exception, connection will be closed below anyway.
         }
