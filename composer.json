@@ -46,7 +46,6 @@
             "Amp\\Websocket\\": "src"
         },
         "files": [
-            "src/constants.php",
             "src/functions.php"
         ]
     },
