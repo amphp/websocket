@@ -16,6 +16,27 @@ use function Amp\call;
 
 final class Rfc6455Client implements Client
 {
+    /** @var self[] */
+    private static $clients;
+
+    /** @var int[] */
+    private static $bytesReadInLastSecond = [];
+
+    /** @var int[] */
+    private static $framesReadInLastSecond = [];
+
+    /** @var Deferred[] */
+    private static $rateDeferreds = [];
+
+    /** @var string */
+    private static $watcher;
+
+    /** @var int[] Array of next ping (heartbeat) times. */
+    private static $heartbeatTimeouts = [];
+
+    /** @var int Cached current time. */
+    private static $now;
+
     /** @var Options */
     private $options;
 
@@ -80,9 +101,6 @@ final class Rfc6455Client implements Client
     private $messagesRead = 0;
     private $messagesSent = 0;
 
-    private $framesReadInLastSecond = 0;
-    private $bytesReadInLastSecond = 0;
-
     private $localAddress;
     private $localPort;
     private $remoteAddress;
@@ -91,17 +109,8 @@ final class Rfc6455Client implements Client
     /** @var mixed[] Array from stream_get_meta_data($this->socket)["crypto"] or an empty array. */
     private $cryptoInfo;
 
-    /** @var Deferred|null */
-    private $rateDeferred;
-
     /** @var Deferred */
     private $closeDeferred;
-
-    /** @var string */
-    private $watcher;
-
-    /** @var int Current timestamp. */
-    private $now;
 
     /**
      * @param Socket                  $socket
@@ -115,8 +124,7 @@ final class Rfc6455Client implements Client
         bool $masked,
         ?CompressionContext $compression = null
     ) {
-        $this->now = \time();
-        $this->connectedAt = $this->now;
+        $this->connectedAt = $this->lastHeartbeatAt = $this->now;
 
         $this->socket = $socket;
         $this->options = $options;
@@ -146,32 +154,47 @@ final class Rfc6455Client implements Client
             $this->remoteAddress = $localName;
         }
 
-        $heartbeatEnabled = $this->options->isHeartbeatEnabled();
-        $heartbeatPeriod = $this->options->getHeartbeatPeriod();
-        $queuedPingLimit = $this->options->getQueuedPingLimit();
-        $this->watcher = Loop::repeat(1000, function () use (
-            $heartbeatEnabled, $heartbeatPeriod, $queuedPingLimit
-        ): void {
-            $this->now = \time();
+        if (self::$watcher === null) {
+            self::$now = \time();
+            self::$watcher = Loop::repeat(1000, function (): void {
+                self::$now = \time();
 
-            $this->bytesReadInLastSecond = 0;
-            $this->framesReadInLastSecond = 0;
+                self::$bytesReadInLastSecond = [];
+                self::$framesReadInLastSecond = [];
 
-            if ($this->rateDeferred !== null) {
-                $deferred = $this->rateDeferred;
-                $this->rateDeferred = null;
-                $deferred->resolve();
-            }
+                $rateDeferreds = self::$rateDeferreds;
+                self::$rateDeferreds = [];
 
-            if ($heartbeatEnabled && $this->lastHeartbeatAt + $heartbeatPeriod > $this->now) {
-                if ($this->pingCount - $this->pongCount > $queuedPingLimit) {
-                    $this->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
-                    return;
+                foreach ($rateDeferreds as $deferred) {
+                    $deferred->resolve();
                 }
 
-                $this->ping();
-            }
-        });
+                foreach (self::$heartbeatTimeouts as $clientId => $expiryTime) {
+                    if ($expiryTime >= self::$now) {
+                        break;
+                    }
+
+                    $client = self::$clients[$clientId];
+                    \assert($client instanceof self);
+                    unset(self::$heartbeatTimeouts[$clientId]);
+                    self::$heartbeatTimeouts[$clientId] = self::$now + $client->options->getHeartbeatPeriod();
+
+                    if ($client->getUnansweredPingCount() > $client->options->getQueuedPingLimit()) {
+                        $client->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
+                        continue;
+                    }
+
+                    $client->ping();
+                }
+            });
+            Loop::unreference(self::$watcher);
+        }
+
+        self::$clients[$this->id] = $this;
+
+        if ($this->options->isHeartbeatEnabled()) {
+            self::$heartbeatTimeouts[$this->id] = self::$now + $this->options->getHeartbeatPeriod();
+        }
 
         Promise\rethrow(new Coroutine($this->read()));
     }
@@ -305,6 +328,8 @@ final class Rfc6455Client implements Client
     {
         $maxFramesPerSecond = $this->options->getFramesPerSecondLimit();
         $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
+        $heartbeatEnabled = $this->options->isHeartbeatEnabled();
+        $heartbeatPeriod = $this->options->getHeartbeatPeriod();
 
         $parser = $this->parser();
 
@@ -314,19 +339,23 @@ final class Rfc6455Client implements Client
                     continue;
                 }
 
-                $this->lastReadAt = $this->now;
-                $this->bytesReadInLastSecond += \strlen($chunk);
+                $this->lastReadAt = self::$now;
+                self::$bytesReadInLastSecond[$this->id] = (self::$bytesReadInLastSecond[$this->id] ?? 0) + \strlen($chunk);
+
+                if ($heartbeatEnabled) {
+                    self::$heartbeatTimeouts[$this->id] = self::$now + $heartbeatPeriod;
+                }
 
                 $parser->send($chunk);
 
                 $chunk = ''; // Free memory from last chunk read.
 
-                if ($this->framesReadInLastSecond >= $maxFramesPerSecond) {
-                    $this->rateDeferred = new Deferred;
-                    yield $this->rateDeferred->promise();
-                } elseif ($this->bytesReadInLastSecond >= $maxBytesPerSecond) {
-                    $this->rateDeferred = new Deferred;
-                    yield $this->rateDeferred->promise();
+                if ((self::$framesReadInLastSecond[$this->id] ?? 0) >= $maxFramesPerSecond) {
+                    self::$rateDeferreds[$this->id] = $deferred = new Deferred;
+                    yield $deferred->promise();
+                } elseif (self::$bytesReadInLastSecond[$this->id] >= $maxBytesPerSecond) {
+                    self::$rateDeferreds[$this->id] = $deferred = new Deferred;
+                    yield $deferred->promise();
                 }
 
                 if ($this->lastEmit && !$this->closedAt) {
@@ -355,9 +384,9 @@ final class Rfc6455Client implements Client
             return;
         }
 
-        $this->lastDataReadAt = $this->now;
+        $this->lastDataReadAt = self::$now;
         ++$this->framesRead;
-        ++$this->framesReadInLastSecond;
+        self::$framesReadInLastSecond[$this->id] = (self::$framesReadInLastSecond[$this->id] ?? 0) + 1;
 
         if (!$this->currentMessageEmitter) {
             if ($opcode === Opcode::CONT) {
@@ -411,7 +440,7 @@ final class Rfc6455Client implements Client
         }
 
         ++$this->framesRead;
-        ++$this->framesReadInLastSecond;
+        self::$framesReadInLastSecond[$this->id] = (self::$framesReadInLastSecond[$this->id] ?? 0) + 1;
 
         switch ($opcode) {
             case Opcode::CLOSE:
@@ -496,7 +525,7 @@ final class Rfc6455Client implements Client
 
     public function ping(): Promise
     {
-        $this->lastHeartbeatAt = $this->now;
+        $this->lastHeartbeatAt = self::$now;
         ++$this->pingCount;
         return $this->write((string) $this->pingCount, Opcode::PING);
     }
@@ -508,7 +537,7 @@ final class Rfc6455Client implements Client
         }
 
         ++$this->messagesSent;
-        $this->lastDataSentAt = $this->now;
+        $this->lastDataSentAt = self::$now;
 
         $rsv = 0;
         $compress = false;
@@ -631,7 +660,7 @@ final class Rfc6455Client implements Client
 
         ++$this->framesSent;
         $this->bytesSent += \strlen($frame);
-        $this->lastSentAt = $this->now;
+        $this->lastSentAt = self::$now;
 
         return $this->socket->write($frame);
     }
@@ -675,7 +704,7 @@ final class Rfc6455Client implements Client
                 \assert($code !== Code::NONE || $reason === '');
                 $promise = $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
 
-                $this->closedAt = $this->now;
+                $this->closedAt = self::$now;
 
                 if ($this->currentMessageEmitter) {
                     $emitter = $this->currentMessageEmitter;
@@ -700,13 +729,14 @@ final class Rfc6455Client implements Client
 
             $this->socket->close();
             $this->lastWrite = null;
-            Loop::cancel($this->watcher);
+
+            unset(self::$clients[$this->id], self::$heartbeatTimeouts[$this->id]);
 
             $onClose = $this->onClose;
             $this->onClose = null;
 
             foreach ($onClose as $callback) {
-                $callback($this, $code, $reason);
+                Promise\rethrow(call($callback, $this, $code, $reason));
             }
 
             return $bytes;
@@ -716,7 +746,7 @@ final class Rfc6455Client implements Client
     public function onClose(callable $callback): void
     {
         if ($this->onClose === null) {
-            $callback($this, $this->closeCode, $this->closeReason);
+            Promise\rethrow(call($callback, $this, $this->closeCode, $this->closeReason));
             return;
         }
 
