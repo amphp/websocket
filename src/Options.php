@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-class Options
+final class Options
 {
     private $streamThreshold = 32768; // 32KB
     private $frameSplitThreshold = 32768; // 32KB
@@ -14,13 +14,16 @@ class Options
     private $validateUtf8 = true;
     private $closePeriod = 3;
     private $compressionEnabled = true;
+    private $heartbeatEnabled = true;
+    private $heartbeatPeriod = 10;
+    private $queuedPingLimit = 3;
 
-    final public function getStreamThreshold(): int
+    public function getStreamThreshold(): int
     {
         return $this->streamThreshold;
     }
 
-    final public function withStreamThreshold(int $streamThreshold): self
+    public function withStreamThreshold(int $streamThreshold): self
     {
         if ($streamThreshold < 1) {
             throw new \Error('$streamThreshold must be a positive integer greater than 0');
@@ -32,12 +35,12 @@ class Options
         return $clone;
     }
 
-    final public function getFrameSplitThreshold(): int
+    public function getFrameSplitThreshold(): int
     {
         return $this->frameSplitThreshold;
     }
 
-    final public function withFrameSplitThreshold(int $frameSplitThreshold): self
+    public function withFrameSplitThreshold(int $frameSplitThreshold): self
     {
         if ($frameSplitThreshold < 1) {
             throw new \Error('$frameSplitThreshold must be a positive integer greater than 0');
@@ -49,12 +52,12 @@ class Options
         return $clone;
     }
 
-    final public function getFrameSizeLimit(): int
+    public function getFrameSizeLimit(): int
     {
         return $this->frameSizeLimit;
     }
 
-    final public function withFrameSizeLimit(int $frameSizeLimit): self
+    public function withFrameSizeLimit(int $frameSizeLimit): self
     {
         if ($frameSizeLimit < 1) {
             throw new \Error('$frameSizeLimit must be a positive integer greater than 0');
@@ -66,12 +69,12 @@ class Options
         return $clone;
     }
 
-    final public function getBytesPerSecondLimit(): int
+    public function getBytesPerSecondLimit(): int
     {
         return $this->bytesPerSecondLimit;
     }
 
-    final public function withBytesPerSecondLimit(int $bytesPerSecond): self
+    public function withBytesPerSecondLimit(int $bytesPerSecond): self
     {
         if ($bytesPerSecond < 1) {
             throw new \Error('$bytesPerSecond must be a positive integer greater than 0');
@@ -83,12 +86,12 @@ class Options
         return $clone;
     }
 
-    final public function getFramesPerSecondLimit(): int
+    public function getFramesPerSecondLimit(): int
     {
         return $this->bytesPerSecondLimit;
     }
 
-    final public function withFramesPerSecondLimit(int $framesPerSecond): self
+    public function withFramesPerSecondLimit(int $framesPerSecond): self
     {
         if ($framesPerSecond < 1) {
             throw new \Error('$bytesPerSecond must be a positive integer greater than 0');
@@ -100,12 +103,12 @@ class Options
         return $clone;
     }
 
-    final public function getMessageSizeLimit(): int
+    public function getMessageSizeLimit(): int
     {
         return $this->messageSizeLimit;
     }
 
-    final public function withMessageSizeLimit(int $messageSizeLimit): self
+    public function withMessageSizeLimit(int $messageSizeLimit): self
     {
         if ($messageSizeLimit < 1) {
             throw new \Error('$messageSizeLimit must be a positive integer greater than 0');
@@ -117,12 +120,12 @@ class Options
         return $clone;
     }
 
-    final public function isTextOnly(): bool
+    public function isTextOnly(): bool
     {
         return $this->textOnly;
     }
 
-    final public function withTextOnly(bool $textOnly): self
+    public function withTextOnly(bool $textOnly): self
     {
         $clone = clone $this;
         $clone->textOnly = $textOnly;
@@ -130,12 +133,12 @@ class Options
         return $clone;
     }
 
-    final public function isValidateUtf8(): bool
+    public function isValidateUtf8(): bool
     {
         return $this->validateUtf8;
     }
 
-    final public function withValidateUtf8(bool $validateUtf8): self
+    public function withValidateUtf8(bool $validateUtf8): self
     {
         $clone = clone $this;
         $clone->validateUtf8 = $validateUtf8;
@@ -143,12 +146,12 @@ class Options
         return $clone;
     }
 
-    final public function getClosePeriod(): int
+    public function getClosePeriod(): int
     {
         return $this->closePeriod;
     }
 
-    final public function withClosePeriod(int $closePeriod): self
+    public function withClosePeriod(int $closePeriod): self
     {
         if ($closePeriod < 1) {
             throw new \Error('$closePeriod must be a positive integer greater than 0');
@@ -160,12 +163,12 @@ class Options
         return $clone;
     }
 
-    final public function isCompressionEnabled(): bool
+    public function isCompressionEnabled(): bool
     {
         return $this->compressionEnabled;
     }
 
-    final public function withCompression(): self
+    public function withCompression(): self
     {
         $clone = clone $this;
         $clone->compressionEnabled = true;
@@ -173,11 +176,67 @@ class Options
         return $clone;
     }
 
-    final public function withoutCompression(): self
+    public function withoutCompression(): self
     {
         $clone = clone $this;
         $clone->compressionEnabled = false;
 
         return $clone;
     }
+    
+    public function isHeartbeatEnabled(): bool
+    {
+        return $this->heartbeatEnabled;
+    }
+    
+    public function withHeartbeat(): self
+    {
+        $clone = clone $this;
+        $clone->heartbeatEnabled = true;
+        
+        return $clone;
+    }
+
+    public function withoutHeartbeat(): self
+    {
+        $clone = clone $this;
+        $clone->heartbeatEnabled = false;
+
+        return $clone;
+    }
+
+    public function getHeartbeatPeriod(): int
+    {
+        return $this->heartbeatPeriod;
+    }
+
+    public function withHeartbeatPeriod(int $heartbeatPeriod): self
+    {
+        if ($heartbeatPeriod < 1) {
+            throw new \Error('$heartbeatPeriod must be a positive integer greater than 0');
+        }
+
+        $clone = clone $this;
+        $clone->heartbeatPeriod = $heartbeatPeriod;
+
+        return $clone;
+    }
+
+    public function getQueuedPingLimit(): int
+    {
+        return $this->queuedPingLimit;
+    }
+
+    public function withQueuedPingLimit(int $queuedPingLimit): self
+    {
+        if ($queuedPingLimit < 1) {
+            throw new \Error('$queuedPingLimit must be a positive integer greater than 0');
+        }
+
+        $clone = clone $this;
+        $clone->queuedPingLimit = $queuedPingLimit;
+
+        return $clone;
+    }
+
 }

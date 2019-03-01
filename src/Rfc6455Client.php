@@ -64,11 +64,15 @@ final class Rfc6455Client implements Client
     /** @var string|null */
     private $closeReason;
 
+    /** @var callable[]|null */
+    private $onClose = [];
+
     private $closedAt = 0;
     private $lastReadAt = 0;
     private $lastSentAt = 0;
     private $lastDataReadAt = 0;
     private $lastDataSentAt = 0;
+    private $lastHeartbeatAt = 0;
     private $bytesRead = 0;
     private $bytesSent = 0;
     private $framesRead = 0;
@@ -142,31 +146,34 @@ final class Rfc6455Client implements Client
             $this->remoteAddress = $localName;
         }
 
-        $now = &$this->now;
-        $framesReadInLastSecond = &$this->framesReadInLastSecond;
-        $bytesReadInLastSecond = &$this->bytesReadInLastSecond;
-        $rateDeferred = &$this->rateDeferred;
-        $this->watcher = Loop::repeat(1000, static function () use (
-            &$now, &$framesReadInLastSecond, &$bytesReadInLastSecond, &$rateDeferred
+        $heartbeatEnabled = $this->options->isHeartbeatEnabled();
+        $heartbeatPeriod = $this->options->getHeartbeatPeriod();
+        $queuedPingLimit = $this->options->getQueuedPingLimit();
+        $this->watcher = Loop::repeat(1000, function () use (
+            $heartbeatEnabled, $heartbeatPeriod, $queuedPingLimit
         ): void {
-            $now = \time();
+            $this->now = \time();
 
-            $bytesReadInLastSecond = 0;
-            $framesReadInLastSecond = 0;
+            $this->bytesReadInLastSecond = 0;
+            $this->framesReadInLastSecond = 0;
 
-            if ($rateDeferred !== null) {
-                $deferred = $rateDeferred;
-                $rateDeferred = null;
+            if ($this->rateDeferred !== null) {
+                $deferred = $this->rateDeferred;
+                $this->rateDeferred = null;
                 $deferred->resolve();
+            }
+
+            if ($heartbeatEnabled && $this->lastHeartbeatAt + $heartbeatPeriod > $this->now) {
+                if ($this->pingCount - $this->pongCount > $queuedPingLimit) {
+                    $this->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
+                    return;
+                }
+
+                $this->ping();
             }
         });
 
         Promise\rethrow(new Coroutine($this->read()));
-    }
-
-    public function __destruct()
-    {
-        Loop::cancel($this->watcher);
     }
 
     public function receive(): Promise
@@ -287,6 +294,7 @@ final class Rfc6455Client implements Client
             'last_sent_at' => $this->lastSentAt,
             'last_data_read_at' => $this->lastDataReadAt,
             'last_data_sent_at' => $this->lastDataSentAt,
+            'last_heartbeat_at' => $this->lastHeartbeatAt,
             'ping_count' => $this->pingCount,
             'pong_count' => $this->pongCount,
             'compression_enabled' => $this->compressionContext !== null,
@@ -336,7 +344,7 @@ final class Rfc6455Client implements Client
         }
 
         if (!$this->closedAt) {
-            yield $this->close(Code::ABNORMAL_CLOSE, 'Underlying TCP connection closed');
+            $this->close(Code::ABNORMAL_CLOSE, 'Underlying TCP connection closed');
         }
     }
 
@@ -488,6 +496,7 @@ final class Rfc6455Client implements Client
 
     public function ping(): Promise
     {
+        $this->lastHeartbeatAt = $this->now;
         ++$this->pingCount;
         return $this->write((string) $this->pingCount, Opcode::PING);
     }
@@ -693,8 +702,25 @@ final class Rfc6455Client implements Client
             $this->lastWrite = null;
             Loop::cancel($this->watcher);
 
+            $onClose = $this->onClose;
+            $this->onClose = null;
+
+            foreach ($onClose as $callback) {
+                $callback($this, $code, $reason);
+            }
+
             return $bytes;
         });
+    }
+
+    public function onClose(callable $callback): void
+    {
+        if ($this->onClose === null) {
+            $callback($this, $this->closeCode, $this->closeReason);
+            return;
+        }
+
+        $this->onClose[] = $callback;
     }
 
     /**

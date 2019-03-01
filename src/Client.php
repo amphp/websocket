@@ -165,6 +165,9 @@ interface Client
      *     'last_sent_at' => int,
      *     'last_data_read_at' => int,
      *     'last_data_sent_at' => int,
+     *     'last_heartbeat_at' => int,
+     *     'ping_count' => int,
+     *     'pong_count' => int,
      *     'compression_enabled' => bool,
      * ]
      * ```
@@ -182,4 +185,12 @@ interface Client
      * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
      */
     public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): Promise;
+
+    /**
+     * Attaches a callback invoked when the client closes. The callback is passed this object as the first parameter,
+     * the close code as the second parameter, and the close reason as the third parameter.
+     *
+     * @param callable(Client $client, int $code, string $reason) $callback
+     */
+    public function onClose(callable $callback): void;
 }
