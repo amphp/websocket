@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-class Rfc7692CompressionFactory implements CompressionContextFactory
+final class Rfc7692CompressionFactory implements CompressionContextFactory
 {
     public function fromClientHeader(string $headerIn, ?string &$headerOut): ?CompressionContext
     {
