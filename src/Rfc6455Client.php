@@ -12,6 +12,7 @@ use Amp\Loop;
 use Amp\Promise;
 use Amp\Socket\Socket;
 use Amp\Success;
+use cash\LRUCache;
 use function Amp\call;
 
 final class Rfc6455Client implements Client
@@ -31,8 +32,8 @@ final class Rfc6455Client implements Client
     /** @var string */
     private static $watcher;
 
-    /** @var int[] Array of next ping (heartbeat) times. */
-    private static $heartbeatTimeouts = [];
+    /** @var LRUCache Array of next ping (heartbeat) times. */
+    private static $heartbeatTimeouts;
 
     /** @var int Cached current time. */
     private static $now;
@@ -156,6 +157,13 @@ final class Rfc6455Client implements Client
 
         if (self::$watcher === null) {
             self::$now = \time();
+            self::$heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
+                public function getIterator(): \Iterator
+                {
+                    yield from $this->data;
+                }
+            };
+
             self::$watcher = Loop::repeat(1000, function (): void {
                 self::$now = \time();
 
@@ -176,8 +184,7 @@ final class Rfc6455Client implements Client
 
                     $client = self::$clients[$clientId];
                     \assert($client instanceof self);
-                    unset(self::$heartbeatTimeouts[$clientId]);
-                    self::$heartbeatTimeouts[$clientId] = self::$now + $client->options->getHeartbeatPeriod();
+                    self::$heartbeatTimeouts->put($clientId, self::$now + $client->options->getHeartbeatPeriod());
 
                     if ($client->getUnansweredPingCount() > $client->options->getQueuedPingLimit()) {
                         $client->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
@@ -193,7 +200,7 @@ final class Rfc6455Client implements Client
         self::$clients[$this->id] = $this;
 
         if ($this->options->isHeartbeatEnabled()) {
-            self::$heartbeatTimeouts[$this->id] = self::$now + $this->options->getHeartbeatPeriod();
+            self::$heartbeatTimeouts->put($this->id, self::$now + $this->options->getHeartbeatPeriod());
         }
 
         Promise\rethrow(new Coroutine($this->read()));
@@ -343,7 +350,7 @@ final class Rfc6455Client implements Client
                 self::$bytesReadInLastSecond[$this->id] = (self::$bytesReadInLastSecond[$this->id] ?? 0) + \strlen($chunk);
 
                 if ($heartbeatEnabled) {
-                    self::$heartbeatTimeouts[$this->id] = self::$now + $heartbeatPeriod;
+                    self::$heartbeatTimeouts->put($this->id, self::$now + $heartbeatPeriod);
                 }
 
                 $parser->send($chunk);
@@ -730,7 +737,8 @@ final class Rfc6455Client implements Client
             $this->socket->close();
             $this->lastWrite = null;
 
-            unset(self::$clients[$this->id], self::$heartbeatTimeouts[$this->id]);
+            unset(self::$clients[$this->id]);
+            self::$heartbeatTimeouts->remove($this->id);
 
             $onClose = $this->onClose;
             $this->onClose = null;
