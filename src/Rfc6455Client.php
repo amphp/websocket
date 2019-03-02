@@ -125,8 +125,6 @@ final class Rfc6455Client implements Client
         bool $masked,
         ?CompressionContext $compression = null
     ) {
-        $this->connectedAt = $this->lastHeartbeatAt = $this->now;
-
         $this->socket = $socket;
         $this->options = $options;
         $this->masked = $masked;
@@ -196,6 +194,8 @@ final class Rfc6455Client implements Client
             });
             Loop::unreference(self::$watcher);
         }
+
+        $this->connectedAt = $this->lastHeartbeatAt = self::$now;
 
         self::$clients[$this->id] = $this;
 
