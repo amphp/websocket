@@ -162,7 +162,7 @@ final class Rfc6455Client implements Client
                 }
             };
 
-            self::$watcher = Loop::repeat(1000, function (): void {
+            self::$watcher = Loop::repeat(1000, static function (): void {
                 self::$now = \time();
 
                 self::$bytesReadInLastSecond = [];
@@ -357,10 +357,8 @@ final class Rfc6455Client implements Client
 
                 $chunk = ''; // Free memory from last chunk read.
 
-                if ((self::$framesReadInLastSecond[$this->id] ?? 0) >= $maxFramesPerSecond) {
-                    self::$rateDeferreds[$this->id] = $deferred = new Deferred;
-                    yield $deferred->promise();
-                } elseif (self::$bytesReadInLastSecond[$this->id] >= $maxBytesPerSecond) {
+                if ((self::$framesReadInLastSecond[$this->id] ?? 0) >= $maxFramesPerSecond
+                    || self::$bytesReadInLastSecond[$this->id] >= $maxBytesPerSecond) {
                     self::$rateDeferreds[$this->id] = $deferred = new Deferred;
                     yield $deferred->promise();
                 }
@@ -739,6 +737,12 @@ final class Rfc6455Client implements Client
 
             unset(self::$clients[$this->id]);
             self::$heartbeatTimeouts->remove($this->id);
+
+            if (empty(self::$clients)) {
+                Loop::cancel(self::$watcher);
+                self::$watcher = null;
+                self::$heartbeatTimeouts = null;
+            }
 
             $onClose = $this->onClose;
             $this->onClose = null;
