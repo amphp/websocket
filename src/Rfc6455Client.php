@@ -301,6 +301,11 @@ final class Rfc6455Client implements Client
         return $this->peerInitiatedClose;
     }
 
+    public function getOptions(): Options
+    {
+        return $this->options;
+    }
+
     public function getInfo(): array
     {
         return [

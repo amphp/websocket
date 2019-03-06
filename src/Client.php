@@ -115,7 +115,7 @@ interface Client
      *
      * @param InputStream $stream
      *
-     * @return Promise
+     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
@@ -127,7 +127,7 @@ interface Client
      *
      * @param InputStream $stream
      *
-     * @return Promise
+     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
@@ -139,6 +139,11 @@ interface Client
      * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
      */
     public function ping(): Promise;
+
+    /**
+     * @return Options The options object associated with this client.
+     */
+    public function getOptions(): Options;
 
     /**
      * Returns connection metadata.
