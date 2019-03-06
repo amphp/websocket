@@ -21,6 +21,9 @@ final class Code
     public const BAD_GATEWAY = 1014;
     public const TLS_HANDSHAKE_FAILURE = 1015;
 
+    /**
+     * @codeCoverageIgnore Class cannot be instigated.
+     */
     private function __construct()
     {
         // no instances allowed

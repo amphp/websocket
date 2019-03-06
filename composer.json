@@ -53,7 +53,10 @@
     "autoload-dev": {
         "psr-4": {
             "Amp\\Websocket\\Test\\": "test"
-        }
+        },
+        "files": [
+            "test/functions.php"
+        ]
     },
     "config": {
         "platform": {

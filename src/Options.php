@@ -183,17 +183,17 @@ final class Options
 
         return $clone;
     }
-    
+
     public function isHeartbeatEnabled(): bool
     {
         return $this->heartbeatEnabled;
     }
-    
+
     public function withHeartbeat(): self
     {
         $clone = clone $this;
         $clone->heartbeatEnabled = true;
-        
+
         return $clone;
     }
 
@@ -238,5 +238,4 @@ final class Options
 
         return $clone;
     }
-
 }

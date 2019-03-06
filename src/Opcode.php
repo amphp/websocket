@@ -11,6 +11,9 @@ final class Opcode
     public const PING = 0x09;
     public const PONG = 0x0A;
 
+    /**
+     * @codeCoverageIgnore Class cannot be instigated.
+     */
     private function __construct()
     {
         // forbid instances

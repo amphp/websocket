@@ -133,6 +133,8 @@ final class Rfc6455Client implements Client
         $resource = $socket->getResource();
         $this->id = (int) $resource;
 
+        self::$clients[$this->id] = $this;
+
         $this->cryptoInfo = \stream_get_meta_data($resource)["crypto"] ?? [];
 
         $this->closeDeferred = new Deferred;
@@ -196,8 +198,6 @@ final class Rfc6455Client implements Client
         }
 
         $this->connectedAt = $this->lastHeartbeatAt = self::$now;
-
-        self::$clients[$this->id] = $this;
 
         if ($this->options->isHeartbeatEnabled()) {
             self::$heartbeatTimeouts->put($this->id, self::$now + $this->options->getHeartbeatPeriod());
@@ -389,7 +389,7 @@ final class Rfc6455Client implements Client
 
     private function onData(int $opcode, string $data, bool $terminated): void
     {
-        // something went that wrong that we had to close... if parser has anything left, we don't care!
+        // Ignore further data received after initiating close.
         if ($this->closedAt) {
             return;
         }
@@ -444,8 +444,8 @@ final class Rfc6455Client implements Client
 
     private function onControlFrame(int $opcode, string $data): void
     {
-        // something went that wrong that we had to close... if parser has anything left, we don't care!
-        if ($this->closedAt) {
+        // Close already completed, so ignore any further data from the parser.
+        if ($this->closedAt && $this->closeDeferred === null) {
             return;
         }
 
@@ -500,6 +500,11 @@ final class Rfc6455Client implements Client
                 break;
 
             case Opcode::PONG:
+                if (!\preg_match('/^[1-9][0-9]*$/', $data)) {
+                    $this->close(Code::POLICY_VIOLATION, 'Invalid pong payload');
+                    break;
+                }
+
                 // We need a min() here, else someone might just send a pong frame with a very high pong count and
                 // leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
                 $this->pongCount = \min($this->pingCount, (int) $data);
@@ -705,9 +710,6 @@ final class Rfc6455Client implements Client
         }
 
         return call(function () use ($code, $reason) {
-            $this->closeCode = $code;
-            $this->closeReason = $reason;
-
             $bytes = 0;
 
             try {
@@ -715,6 +717,8 @@ final class Rfc6455Client implements Client
                 $promise = $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
 
                 $this->closedAt = self::$now;
+                $this->closeCode = $code;
+                $this->closeReason = $reason;
 
                 if ($this->currentMessageEmitter) {
                     $emitter = $this->currentMessageEmitter;
@@ -739,6 +743,14 @@ final class Rfc6455Client implements Client
 
             $this->socket->close();
             $this->lastWrite = null;
+            $this->lastEmit = null;
+
+            $onClose = $this->onClose;
+            $this->onClose = null;
+
+            foreach ($onClose as $callback) {
+                Promise\rethrow(call($callback, $this, $code, $reason));
+            }
 
             unset(self::$clients[$this->id]);
             self::$heartbeatTimeouts->remove($this->id);
@@ -747,13 +759,6 @@ final class Rfc6455Client implements Client
                 Loop::cancel(self::$watcher);
                 self::$watcher = null;
                 self::$heartbeatTimeouts = null;
-            }
-
-            $onClose = $this->onClose;
-            $this->onClose = null;
-
-            foreach ($onClose as $callback) {
-                Promise\rethrow(call($callback, $this, $code, $reason));
             }
 
             return $bytes;
