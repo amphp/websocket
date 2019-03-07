@@ -148,38 +148,9 @@ interface Client
     /**
      * Returns connection metadata.
      *
-     * ```
-     * [
-     *     'local_address' => string,
-     *     'local_port' => int|null
-     *     'remote_address' => string,
-     *     'remote_port' => int|null,
-     *     'is_encrypted' => bool,
-     *     'bytes_read' => int,
-     *     'bytes_sent' => int,
-     *     'frames_read' => int,
-     *     'frames_sent' => int,
-     *     'messages_read' => int,
-     *     'messages_sent' => int,
-     *     'connected_at' => int,
-     *     'closed_at' => int,
-     *     'close_code' => int|null,
-     *     'close_reason' => string|null,
-     *     'peer_initiated_close' => bool,
-     *     'last_read_at' => int,
-     *     'last_sent_at' => int,
-     *     'last_data_read_at' => int,
-     *     'last_data_sent_at' => int,
-     *     'last_heartbeat_at' => int,
-     *     'ping_count' => int,
-     *     'pong_count' => int,
-     *     'compression_enabled' => bool,
-     * ]
-     * ```
-     *
-     * @return array Array in the format described above.
+     * @return ClientMetadata
      */
-    public function getInfo(): array;
+    public function getInfo(): ClientMetadata;
 
     /**
      * Closes the client connection.

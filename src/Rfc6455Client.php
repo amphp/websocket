@@ -41,9 +41,6 @@ final class Rfc6455Client implements Client
     /** @var Options */
     private $options;
 
-    /** @var int */
-    private $id;
-
     /** @var \Amp\Socket\Socket */
     private $socket;
 
@@ -71,44 +68,11 @@ final class Rfc6455Client implements Client
     /** @var Message[] */
     private $messages = [];
 
-    private $pingCount = 0;
-    private $pongCount = 0;
-
-    /** @var int */
-    private $connectedAt;
-
-    /** @var bool */
-    private $peerInitiatedClose = false;
-
-    /** @var int|null */
-    private $closeCode;
-
-    /** @var string|null */
-    private $closeReason;
-
     /** @var callable[]|null */
     private $onClose = [];
 
-    private $closedAt = 0;
-    private $lastReadAt = 0;
-    private $lastSentAt = 0;
-    private $lastDataReadAt = 0;
-    private $lastDataSentAt = 0;
-    private $lastHeartbeatAt = 0;
-    private $bytesRead = 0;
-    private $bytesSent = 0;
-    private $framesRead = 0;
-    private $framesSent = 0;
-    private $messagesRead = 0;
-    private $messagesSent = 0;
-
-    private $localAddress;
-    private $localPort;
-    private $remoteAddress;
-    private $remotePort;
-
-    /** @var mixed[] Array from stream_get_meta_data($this->socket)["crypto"] or an empty array. */
-    private $cryptoInfo;
+    /** @var ClientMetadata */
+    private $metadata;
 
     /** @var Deferred */
     private $closeDeferred;
@@ -129,31 +93,7 @@ final class Rfc6455Client implements Client
         $this->options = $options;
         $this->masked = $masked;
         $this->compressionContext = $compression;
-
-        $resource = $socket->getResource();
-        $this->id = (int) $resource;
-
-        self::$clients[$this->id] = $this;
-
-        $this->cryptoInfo = \stream_get_meta_data($resource)["crypto"] ?? [];
-
         $this->closeDeferred = new Deferred;
-
-        $localName = (string) $this->socket->getLocalAddress();
-        if ($portStartPos = \strrpos($localName, ":")) {
-            $this->localAddress = \substr($localName, 0, $portStartPos);
-            $this->localPort = (int) \substr($localName, $portStartPos + 1);
-        } else {
-            $this->localAddress = $localName;
-        }
-
-        $remoteName = (string) $this->socket->getRemoteAddress();
-        if ($portStartPos = \strrpos($remoteName, ":")) {
-            $this->remoteAddress = \substr($remoteName, 0, $portStartPos);
-            $this->remotePort = (int) \substr($remoteName, $portStartPos + 1);
-        } else {
-            $this->remoteAddress = $localName;
-        }
 
         if (self::$watcher === null) {
             self::$now = \time();
@@ -197,10 +137,11 @@ final class Rfc6455Client implements Client
             Loop::unreference(self::$watcher);
         }
 
-        $this->connectedAt = $this->lastHeartbeatAt = self::$now;
+        $this->metadata = new ClientMetadata($socket, self::$now, $compression !== null);
+        self::$clients[$this->metadata->id] = $this;
 
         if ($this->options->isHeartbeatEnabled()) {
-            self::$heartbeatTimeouts->put($this->id, self::$now + $this->options->getHeartbeatPeriod());
+            self::$heartbeatTimeouts->put($this->metadata->id, self::$now + $this->options->getHeartbeatPeriod());
         }
 
         Promise\rethrow(new Coroutine($this->read()));
@@ -220,7 +161,7 @@ final class Rfc6455Client implements Client
             return new Success($message);
         }
 
-        if ($this->closedAt) {
+        if ($this->metadata->closedAt) {
             return new Success;
         }
 
@@ -231,74 +172,74 @@ final class Rfc6455Client implements Client
 
     public function getId(): int
     {
-        return $this->id;
+        return $this->metadata->id;
     }
 
     public function getUnansweredPingCount(): int
     {
-        return $this->pingCount - $this->pongCount;
+        return $this->metadata->pingCount - $this->metadata->pongCount;
     }
 
     public function isConnected(): bool
     {
-        return !$this->closedAt;
+        return !$this->metadata->closedAt;
     }
 
     public function getLocalAddress(): string
     {
-        return $this->localAddress;
+        return $this->metadata->localAddress;
     }
 
     public function getLocalPort(): ?int
     {
-        return $this->localPort;
+        return $this->metadata->localPort;
     }
 
     public function getRemoteAddress(): string
     {
-        return $this->remoteAddress;
+        return $this->metadata->remoteAddress;
     }
 
     public function getRemotePort(): ?int
     {
-        return $this->remotePort;
+        return $this->metadata->remotePort;
     }
 
     public function isEncrypted(): bool
     {
-        return !empty($this->cryptoInfo);
+        return !empty($this->metadata->cryptoInfo);
     }
 
     public function getCryptoContext(): array
     {
-        return $this->cryptoInfo;
+        return $this->metadata->cryptoInfo;
     }
 
     public function getCloseCode(): int
     {
-        if (!$this->closedAt) {
+        if (!$this->metadata->closedAt) {
             throw new \Error('The client has not closed');
         }
 
-        return $this->closeCode;
+        return $this->metadata->closeCode;
     }
 
     public function getCloseReason(): string
     {
-        if (!$this->closedAt) {
+        if (!$this->metadata->closedAt) {
             throw new \Error('The client has not closed');
         }
 
-        return $this->closeReason;
+        return $this->metadata->closeReason;
     }
 
     public function didPeerInitiateClose(): bool
     {
-        if (!$this->closedAt) {
+        if (!$this->metadata->closedAt) {
             throw new \Error('The client has not closed');
         }
 
-        return $this->peerInitiatedClose;
+        return $this->metadata->peerInitiatedClose;
     }
 
     public function getOptions(): Options
@@ -306,34 +247,9 @@ final class Rfc6455Client implements Client
         return $this->options;
     }
 
-    public function getInfo(): array
+    public function getInfo(): ClientMetadata
     {
-        return [
-            'local_address' => $this->localAddress,
-            'local_port' => $this->localPort,
-            'remote_address' => $this->remoteAddress,
-            'remote_port' => $this->remotePort,
-            'is_encrypted' => !empty($this->cryptoInfo),
-            'bytes_read' => $this->bytesRead,
-            'bytes_sent' => $this->bytesSent,
-            'frames_read' => $this->framesRead,
-            'frames_sent' => $this->framesSent,
-            'messages_read' => $this->messagesRead,
-            'messages_sent' => $this->messagesSent,
-            'connected_at' => $this->connectedAt,
-            'closed_at' => $this->closedAt,
-            'close_code' => $this->closeCode,
-            'close_reason' => $this->closeReason,
-            'peer_initiated_close' => $this->peerInitiatedClose,
-            'last_read_at' => $this->lastReadAt,
-            'last_sent_at' => $this->lastSentAt,
-            'last_data_read_at' => $this->lastDataReadAt,
-            'last_data_sent_at' => $this->lastDataSentAt,
-            'last_heartbeat_at' => $this->lastHeartbeatAt,
-            'ping_count' => $this->pingCount,
-            'pong_count' => $this->pongCount,
-            'compression_enabled' => $this->compressionContext !== null,
-        ];
+        return clone $this->metadata;
     }
 
     private function read(): \Generator
@@ -351,24 +267,24 @@ final class Rfc6455Client implements Client
                     continue;
                 }
 
-                $this->lastReadAt = self::$now;
-                self::$bytesReadInLastSecond[$this->id] = (self::$bytesReadInLastSecond[$this->id] ?? 0) + \strlen($chunk);
+                $this->metadata->lastReadAt = self::$now;
+                self::$bytesReadInLastSecond[$this->metadata->id] = (self::$bytesReadInLastSecond[$this->metadata->id] ?? 0) + \strlen($chunk);
 
                 if ($heartbeatEnabled) {
-                    self::$heartbeatTimeouts->put($this->id, self::$now + $heartbeatPeriod);
+                    self::$heartbeatTimeouts->put($this->metadata->id, self::$now + $heartbeatPeriod);
                 }
 
                 $parser->send($chunk);
 
                 $chunk = ''; // Free memory from last chunk read.
 
-                if ((self::$framesReadInLastSecond[$this->id] ?? 0) >= $maxFramesPerSecond
-                    || self::$bytesReadInLastSecond[$this->id] >= $maxBytesPerSecond) {
-                    self::$rateDeferreds[$this->id] = $deferred = new Deferred;
+                if ((self::$framesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxFramesPerSecond
+                    || self::$bytesReadInLastSecond[$this->metadata->id] >= $maxBytesPerSecond) {
+                    self::$rateDeferreds[$this->metadata->id] = $deferred = new Deferred;
                     yield $deferred->promise();
                 }
 
-                if ($this->lastEmit && !$this->closedAt) {
+                if ($this->lastEmit && !$this->metadata->closedAt) {
                     yield $this->lastEmit;
                 }
             }
@@ -382,7 +298,7 @@ final class Rfc6455Client implements Client
             $deferred->resolve();
         }
 
-        if (!$this->closedAt) {
+        if (!$this->metadata->closedAt) {
             $this->close(Code::ABNORMAL_CLOSE, 'Underlying TCP connection closed');
         }
     }
@@ -390,13 +306,13 @@ final class Rfc6455Client implements Client
     private function onData(int $opcode, string $data, bool $terminated): void
     {
         // Ignore further data received after initiating close.
-        if ($this->closedAt) {
+        if ($this->metadata->closedAt) {
             return;
         }
 
-        $this->lastDataReadAt = self::$now;
-        ++$this->framesRead;
-        self::$framesReadInLastSecond[$this->id] = (self::$framesReadInLastSecond[$this->id] ?? 0) + 1;
+        $this->metadata->lastDataReadAt = self::$now;
+        ++$this->metadata->framesRead;
+        self::$framesReadInLastSecond[$this->metadata->id] = (self::$framesReadInLastSecond[$this->metadata->id] ?? 0) + 1;
 
         if (!$this->currentMessageEmitter) {
             if ($opcode === Opcode::CONT) {
@@ -438,19 +354,19 @@ final class Rfc6455Client implements Client
             $this->currentMessageEmitter = null;
             $emitter->complete();
 
-            ++$this->messagesRead;
+            ++$this->metadata->messagesRead;
         }
     }
 
     private function onControlFrame(int $opcode, string $data): void
     {
         // Close already completed, so ignore any further data from the parser.
-        if ($this->closedAt && $this->closeDeferred === null) {
+        if ($this->metadata->closedAt && $this->closeDeferred === null) {
             return;
         }
 
-        ++$this->framesRead;
-        self::$framesReadInLastSecond[$this->id] = (self::$framesReadInLastSecond[$this->id] ?? 0) + 1;
+        ++$this->metadata->framesRead;
+        self::$framesReadInLastSecond[$this->metadata->id] = (self::$framesReadInLastSecond[$this->metadata->id] ?? 0) + 1;
 
         switch ($opcode) {
             case Opcode::CLOSE:
@@ -460,11 +376,11 @@ final class Rfc6455Client implements Client
                     $deferred->resolve();
                 }
 
-                if ($this->closedAt) {
+                if ($this->metadata->closedAt) {
                     break;
                 }
 
-                $this->peerInitiatedClose = true;
+                $this->metadata->peerInitiatedClose = true;
 
                 $length = \strlen($data);
                 if ($length === 0) {
@@ -507,7 +423,7 @@ final class Rfc6455Client implements Client
 
                 // We need a min() here, else someone might just send a pong frame with a very high pong count and
                 // leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
-                $this->pongCount = \min($this->pingCount, (int) $data);
+                $this->metadata->pongCount = \min($this->metadata->pingCount, (int) $data);
                 break;
         }
     }
@@ -540,9 +456,9 @@ final class Rfc6455Client implements Client
 
     public function ping(): Promise
     {
-        $this->lastHeartbeatAt = self::$now;
-        ++$this->pingCount;
-        return $this->write((string) $this->pingCount, Opcode::PING);
+        $this->metadata->lastHeartbeatAt = self::$now;
+        ++$this->metadata->pingCount;
+        return $this->write((string) $this->metadata->pingCount, Opcode::PING);
     }
 
     private function sendData(string $data, int $opcode): \Generator
@@ -551,8 +467,8 @@ final class Rfc6455Client implements Client
             yield $this->lastWrite;
         }
 
-        ++$this->messagesSent;
-        $this->lastDataSentAt = self::$now;
+        ++$this->metadata->messagesSent;
+        $this->metadata->lastDataSentAt = self::$now;
 
         $rsv = 0;
         $compress = false;
@@ -667,15 +583,15 @@ final class Rfc6455Client implements Client
 
     private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): Promise
     {
-        if ($this->closedAt) {
+        if ($this->metadata->closedAt) {
             return new Success(0);
         }
 
         $frame = $this->compile($data, $opcode, $rsv, $isFinal);
 
-        ++$this->framesSent;
-        $this->bytesSent += \strlen($frame);
-        $this->lastSentAt = self::$now;
+        ++$this->metadata->framesSent;
+        $this->metadata->bytesSent += \strlen($frame);
+        $this->metadata->lastSentAt = self::$now;
 
         return $this->socket->write($frame);
     }
@@ -705,7 +621,7 @@ final class Rfc6455Client implements Client
 
     public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): Promise
     {
-        if ($this->closedAt) {
+        if ($this->metadata->closedAt) {
             return new Success(0);
         }
 
@@ -716,9 +632,9 @@ final class Rfc6455Client implements Client
                 \assert($code !== Code::NONE || $reason === '');
                 $promise = $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
 
-                $this->closedAt = self::$now;
-                $this->closeCode = $code;
-                $this->closeReason = $reason;
+                $this->metadata->closedAt = self::$now;
+                $this->metadata->closeCode = $code;
+                $this->metadata->closeReason = $reason;
 
                 if ($this->currentMessageEmitter) {
                     $emitter = $this->currentMessageEmitter;
@@ -752,8 +668,8 @@ final class Rfc6455Client implements Client
                 Promise\rethrow(call($callback, $this, $code, $reason));
             }
 
-            unset(self::$clients[$this->id]);
-            self::$heartbeatTimeouts->remove($this->id);
+            unset(self::$clients[$this->metadata->id]);
+            self::$heartbeatTimeouts->remove($this->metadata->id);
 
             if (empty(self::$clients)) {
                 Loop::cancel(self::$watcher);

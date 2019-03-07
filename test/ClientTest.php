@@ -209,43 +209,4 @@ class ClientTest extends TestCase
             yield $client->stream($stream);
         });
     }
-
-    public function testGetInfo(): void
-    {
-        $client = new Rfc6455Client($this->createSocket(), (new Options)->withStreamThreshold(10), false);
-        $info = $client->getInfo();
-
-        $this->assertArrayHasKey('connected_at', $info);
-        $this->assertArrayHasKey('last_heartbeat_at', $info);
-
-        // Unset since these properties use the current timestamp.
-        unset($info['connected_at'], $info['last_heartbeat_at']);
-
-        $this->assertSame([
-            'local_address' => '',
-            'local_port' => null,
-            'remote_address' => '',
-            'remote_port' => null,
-            'is_encrypted' => false,
-            'bytes_read' => 0,
-            'bytes_sent' => 0,
-            'frames_read' => 0,
-            'frames_sent' => 0,
-            'messages_read' => 0,
-            'messages_sent' => 0,
-            //'connected_at' => 0,
-            'closed_at' => 0,
-            'close_code' => null,
-            'close_reason' => null,
-            'peer_initiated_close' => false,
-            'last_read_at' => 0,
-            'last_sent_at' => 0,
-            'last_data_read_at' => 0,
-            'last_data_sent_at' => 0,
-            //'last_heartbeat_at' => 0,
-            'ping_count' => 0,
-            'pong_count' => 0,
-            'compression_enabled' => false,
-        ], $info);
-    }
 }
