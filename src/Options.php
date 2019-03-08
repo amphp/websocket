@@ -13,7 +13,7 @@ final class Options
     private $textOnly = false;
     private $validateUtf8 = true;
     private $closePeriod = 3;
-    private $compressionEnabled = true;
+    private $compressionEnabled = false;
     private $heartbeatEnabled = true;
     private $heartbeatPeriod = 10;
     private $queuedPingLimit = 3;
