@@ -40,7 +40,7 @@ final class Rfc7692Compression implements CompressionContext
      */
     public static function createRequestHeader(): string
     {
-        return 'permessage-deflate';
+        return 'permessage-deflate; server_no_context_takeover; client_no_context_takeover';
     }
 
     /**
