@@ -22,7 +22,7 @@ final class Message extends Payload
     /**
      * @return bool True if the message is UTF-8 text, false if it is binary.
      *
-     * @see isBinary
+     * @see Message::isBinary()
      */
     public function isText(): bool
     {
@@ -32,7 +32,7 @@ final class Message extends Payload
     /**
      * @return bool True if the message is binary, false if it is UTF-8 text.
      *
-     * @see isText
+     * @see Message::isText()
      */
     public function isBinary(): bool
     {
