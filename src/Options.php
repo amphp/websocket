@@ -4,18 +4,98 @@ namespace Amp\Websocket;
 
 final class Options
 {
+    /**
+     * Number of bytes that will be buffered when streaming a message body before sending a frame.
+     *
+     * @var int
+     */
     private $streamThreshold = 32768; // 32KB
+
+    /**
+     * If a message exceeds this number of bytes, it is split into multiple frames, each no bigger than this value.
+     *
+     * @var int
+     */
     private $frameSplitThreshold = 32768; // 32KB
+
+    /**
+     * Maximum number of bytes the peer can send per second before being throttled.
+     *
+     * @var int
+     */
     private $bytesPerSecondLimit = 1048576; // 1MB
+
+    /**
+     * Maximum number of frames the peer can send per second before being throttled.
+     *
+     * @var int
+     */
     private $framesPerSecondLimit = 100;
+
+    /**
+     * Maximum frame size that can be received from the peer. If a larger frame
+     * is received, the connection is ended with a POLICY_VIOLATION
+     *
+     * @var int
+     */
     private $frameSizeLimit = 2097152; // 2MB
+
+    /**
+     * Maximum message size that can be received from the remote endpoint. If a
+     * larger message is received, the connection is ended with a POLICY_VIOLATION.
+     *
+     * @var int
+     */
     private $messageSizeLimit = 10485760; // 10MB
+
+    /**
+     * Ends the connection if a binary frame is received.
+     *
+     * @var bool
+     */
     private $textOnly = false;
+
+    /**
+     * Validates that all text received and sent is UTF-8.
+     *
+     * @var bool
+     */
     private $validateUtf8 = true;
+
+    /**
+     * Number of seconds to wait to receive peer close frame.
+     *
+     * @var int
+     */
     private $closePeriod = 3;
+
+    /**
+     * Whether to request or accept per-message compression.
+     *
+     * @var bool
+     */
     private $compressionEnabled = false;
+
+    /**
+     * If enabled, sends a ping frame to the peer every X seconds (determined by
+     * the heartbeat period) if there is no other activity on the connection.
+     *
+     * @var bool
+     */
     private $heartbeatEnabled = true;
+
+    /**
+     * Duration between pings or other connection activity.
+     *
+     * @var int
+     */
     private $heartbeatPeriod = 10;
+
+    /**
+     * Number of unanswered pings before the connection is closed.
+     *
+     * @var int
+     */
     private $queuedPingLimit = 3;
 
     public function getStreamThreshold(): int
