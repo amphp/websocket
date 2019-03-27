@@ -110,11 +110,15 @@ final class Rfc6455Client implements Client
                 self::$bytesReadInLastSecond = [];
                 self::$framesReadInLastSecond = [];
 
-                $rateDeferreds = self::$rateDeferreds;
-                self::$rateDeferreds = [];
+                if (!empty(self::$rateDeferreds)) {
+                    Loop::unreference(self::$watcher);
 
-                foreach ($rateDeferreds as $deferred) {
-                    $deferred->resolve();
+                    $rateDeferreds = self::$rateDeferreds;
+                    self::$rateDeferreds = [];
+
+                    foreach ($rateDeferreds as $deferred) {
+                        $deferred->resolve();
+                    }
                 }
 
                 foreach (self::$heartbeatTimeouts as $clientId => $expiryTime) {
@@ -280,6 +284,7 @@ final class Rfc6455Client implements Client
 
                 if ((self::$framesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxFramesPerSecond
                     || self::$bytesReadInLastSecond[$this->metadata->id] >= $maxBytesPerSecond) {
+                    Loop::reference(self::$watcher); // Reference watcher to keep loop running until rate limit released.
                     self::$rateDeferreds[$this->metadata->id] = $deferred = new Deferred;
                     yield $deferred->promise();
                 }
