@@ -18,11 +18,23 @@ final class Options
     private $heartbeatPeriod = 10;
     private $queuedPingLimit = 3;
 
+    /**
+     * @return int Number of bytes that will be buffered when streaming a message
+     *     body before sending a frame.
+     */
     public function getStreamThreshold(): int
     {
         return $this->streamThreshold;
     }
 
+    /**
+     * @param int $streamThreshold Number of bytes that will be buffered when
+     *     streaming a message body before sending a frame. Default is 32768 (32KB)
+     *
+     * @return self
+     *
+     * @throws \Error if the number is less than 1.
+     */
     public function withStreamThreshold(int $streamThreshold): self
     {
         if ($streamThreshold < 1) {
@@ -35,11 +47,24 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return int If a message exceeds this number of bytes, it is split into
+     *     multiple frames, each no bigger than this value.
+     */
     public function getFrameSplitThreshold(): int
     {
         return $this->frameSplitThreshold;
     }
 
+    /**
+     * @param int $frameSplitThreshold If a message exceeds this number of bytes,
+     *     it is split into multiple frames, each no bigger than this value.
+     *     Default is 32768 (32KB)
+     *
+     * @return self
+     *
+     * @throws \Error if number is less than 1.
+     */
     public function withFrameSplitThreshold(int $frameSplitThreshold): self
     {
         if ($frameSplitThreshold < 1) {
@@ -52,11 +77,24 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return int Maximum frame size that can be received from the peer. If a
+     *     larger frame is received, the connection is ended with a POLICY_VIOLATION.
+     */
     public function getFrameSizeLimit(): int
     {
         return $this->frameSizeLimit;
     }
 
+    /**
+     * @param int $frameSizeLimit Maximum frame size that can be received from the peer.
+     *     If a larger frame is received, the connection is ended with a POLICY_VIOLATION.
+     *     Default is 2097152 (2MB)
+     *
+     * @return self
+     *
+     * @throws \Error if number is less than 1.
+     */
     public function withFrameSizeLimit(int $frameSizeLimit): self
     {
         if ($frameSizeLimit < 1) {
@@ -69,11 +107,22 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return int Maximum number of bytes the peer can send per second before being throttled.
+     */
     public function getBytesPerSecondLimit(): int
     {
         return $this->bytesPerSecondLimit;
     }
 
+    /**
+     * @param int $bytesPerSecond Maximum number of bytes the peer can send per
+     *     second before being throttled. Default is 1048576 (1MB)
+     *
+     * @return self
+     *
+     * @throws \Error if number is less than 1.
+     */
     public function withBytesPerSecondLimit(int $bytesPerSecond): self
     {
         if ($bytesPerSecond < 1) {
@@ -86,11 +135,22 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return int Maximum number of frames the peer can send per second before being throttled.
+     */
     public function getFramesPerSecondLimit(): int
     {
         return $this->bytesPerSecondLimit;
     }
 
+    /**
+     * @param int $framesPerSecond Maximum number of frames the peer can send per
+     *     second before being throttled.
+     *
+     * @return self
+     *
+     * @throws \Error if number is less than 1.
+     */
     public function withFramesPerSecondLimit(int $framesPerSecond): self
     {
         if ($framesPerSecond < 1) {
@@ -103,11 +163,24 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return int Maximum message size that can be received from the remote endpoint.
+     *     If a larger message is received, the connection is ended with a POLICY_VIOLATION.
+     */
     public function getMessageSizeLimit(): int
     {
         return $this->messageSizeLimit;
     }
 
+    /**
+     * @param int $messageSizeLimit  Maximum message size that can be received
+     *     from the remote endpoint. If a larger message is received, the connection
+     *     is ended with a POLICY_VIOLATION. Default is 10485760 (10MB)
+     *
+     * @return self
+     *
+     * @throws \Error if number is less than 1.
+     */
     public function withMessageSizeLimit(int $messageSizeLimit): self
     {
         if ($messageSizeLimit < 1) {
@@ -120,11 +193,19 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return bool If true ends the connection if a binary frame is received.
+     */
     public function isTextOnly(): bool
     {
         return $this->textOnly;
     }
 
+    /**
+     * @param bool $textOnly If true ends the connection if a binary frame is received.
+     *
+     * @return self
+     */
     public function withTextOnly(bool $textOnly): self
     {
         $clone = clone $this;
@@ -133,11 +214,19 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return bool If true validates that all text received and sent is UTF-8.
+     */
     public function isValidateUtf8(): bool
     {
         return $this->validateUtf8;
     }
 
+    /**
+     * @param bool $validateUtf8 If true validates that all text received and sent is UTF-8.
+     *
+     * @return self
+     */
     public function withValidateUtf8(bool $validateUtf8): self
     {
         $clone = clone $this;
@@ -146,11 +235,22 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return int Number of seconds to wait to receive peer close frame.
+     */
     public function getClosePeriod(): int
     {
         return $this->closePeriod;
     }
 
+    /**
+     * @param int $closePeriod Number of seconds to wait to receive peer close
+     *     frame. Default is 3.
+     *
+     * @return self
+     *
+     * @throws \Error if number is less than 1.
+     */
     public function withClosePeriod(int $closePeriod): self
     {
         if ($closePeriod < 1) {
@@ -163,11 +263,17 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return bool Whether to request or accept per-message compression.
+     */
     public function isCompressionEnabled(): bool
     {
         return $this->compressionEnabled;
     }
 
+    /**
+     * @return self Enables requesting or accepting per-message compression.
+     */
     public function withCompression(): self
     {
         $clone = clone $this;
@@ -176,6 +282,9 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return self Disables requesting or accepting per-message compression.
+     */
     public function withoutCompression(): self
     {
         $clone = clone $this;
@@ -184,11 +293,20 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return bool If enabled, sends a ping frame to the peer every X seconds (determined
+     *     by the heartbeat period) if there is no other activity on the connection.
+     */
     public function isHeartbeatEnabled(): bool
     {
         return $this->heartbeatEnabled;
     }
 
+    /**
+     * @return self Enables heartbeat; If enabled, sends a ping frame to the
+     *     peer every X seconds (determined by the heartbeat period) if there
+     *     is no other activity on the connection.
+     */
     public function withHeartbeat(): self
     {
         $clone = clone $this;
@@ -197,6 +315,10 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return self Disables heartbeat; If disabled, will not periodically send
+     *     a ping frame to the peer during timetrames of inactivity on the connection.
+     */
     public function withoutHeartbeat(): self
     {
         $clone = clone $this;
@@ -205,11 +327,22 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return int Duration in seconds between pings or other connection activity if the heartbeat is enabled.
+     */
     public function getHeartbeatPeriod(): int
     {
         return $this->heartbeatPeriod;
     }
 
+    /**
+     * @param int $heartbeatPeriod Duration in seconds between pings or other
+     *     connection activity if the heartbeat is enabled. Default is 10.
+     *
+     * @return self
+     *
+     * @throws \Error if number is less than 1.
+     */
     public function withHeartbeatPeriod(int $heartbeatPeriod): self
     {
         if ($heartbeatPeriod < 1) {
@@ -222,11 +355,21 @@ final class Options
         return $clone;
     }
 
+    /**
+     * @return int The number of unanswered pings before the connection is closed.
+     */
     public function getQueuedPingLimit(): int
     {
         return $this->queuedPingLimit;
     }
 
+    /**
+     * @param int $queuedPingLimit The number of unanswered pings before the connection is closed.
+     *
+     * @return self
+     *
+     * @throws \Error if number is less than 1.
+     */
     public function withQueuedPingLimit(int $queuedPingLimit): self
     {
         if ($queuedPingLimit < 1) {
