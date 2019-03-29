@@ -422,7 +422,7 @@ final class Rfc6455Client implements Client
 
             case Opcode::PONG:
                 if (!\preg_match('/^[1-9][0-9]*$/', $data)) {
-                    $this->close(Code::POLICY_VIOLATION, 'Invalid pong payload');
+                    // Ignore pong payload that is not an integer.
                     break;
                 }
 
