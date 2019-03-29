@@ -18,6 +18,48 @@ final class Options
     private $heartbeatPeriod = 10;
     private $queuedPingLimit = 3;
 
+    /**
+     * Creates an Options object with values as documented on the accessor methods.
+     *
+     * @return self
+     */
+    public static function createServerDefault(): self
+    {
+        return new self; // Initial parameter values already tuned for servers.
+    }
+
+    /**
+     * Creates an Options object with values as documented on the accessor methods except for the following:
+     *
+     * Compression is enabled if the zlib extension is installed.
+     * Bytes per second limit is set to PHP_INT_MAX (effectively removing the limit).
+     * Frames per second limit is set to PHP_INI_MAX (effectively removing the limit).
+     * Message size limit is set to 1 GB.
+     * Frame size limit is set to 100 MB.
+     *
+     * @return self
+     */
+    public static function createClientDefault(): self
+    {
+        $options = new self;
+
+        $options->bytesPerSecondLimit = \PHP_INT_MAX;
+        $options->framesPerSecondLimit = \PHP_INT_MAX;
+        $options->messageSizeLimit = 2 ** 30; // 1 GB
+        $options->frameSizeLimit = 2 ** 20 * 100; // 100 MB
+
+        if (\extension_loaded('zlib')) {
+            $options->compressionEnabled = true;
+        }
+
+        return $options;
+    }
+
+    private function __construct()
+    {
+        // Private constructor to require use of named constructors.
+    }
+
     public function getStreamThreshold(): int
     {
         return $this->streamThreshold;
