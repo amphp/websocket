@@ -194,7 +194,7 @@ class ParserTest extends TestCase
         // 45 ---- pong frame with invalid payload ------------------------------------------------>
 
         $input = compile(Opcode::PONG, true, true, "0");
-        $return[] = [$input, null, true, "Invalid pong payload", Code::POLICY_VIOLATION];
+        $return[] = [$input, null, true, "Underlying TCP connection closed", Code::ABNORMAL_CLOSE];
 
         // x -------------------------------------------------------------------------------------->
 
