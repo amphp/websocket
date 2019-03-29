@@ -37,7 +37,7 @@ class ParserTest extends TestCase
             $socket->method('getResource')
                 ->willReturn(\fopen('php://memory', 'r'));
 
-            $client = new Rfc6455Client($socket, new Options, false);
+            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
             try {
                 while ($message = yield $client->receive()) {

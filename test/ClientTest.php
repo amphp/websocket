@@ -50,7 +50,7 @@ class ClientTest extends TestCase
                     new Success
                 );
 
-            $client = new Rfc6455Client($socket, new Options, false);
+            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
             yield $client->close($code, $reason);
 
@@ -78,7 +78,7 @@ class ClientTest extends TestCase
                 ->method('read')
                 ->willReturn(new Delayed(1200));
 
-            $client = new Rfc6455Client($socket, (new Options)->withClosePeriod(1), false);
+            $client = new Rfc6455Client($socket, Options::createServerDefault()->withClosePeriod(1), false);
 
             $invoked = false;
             $client->onClose(function () use (&$invoked) {
@@ -113,7 +113,7 @@ class ClientTest extends TestCase
                 ->with($packet)
                 ->willReturn(new Success(\strlen($packet)));
 
-            $client = new Rfc6455Client($socket, new Options, false);
+            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
             yield $client->ping();
         });
@@ -129,7 +129,7 @@ class ClientTest extends TestCase
                 ->with($packet)
                 ->willReturn(new Success(\strlen($packet)));
 
-            $client = new Rfc6455Client($socket, new Options, false);
+            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
             yield $client->send('data');
         });
@@ -145,7 +145,7 @@ class ClientTest extends TestCase
                 ->with($packet)
                 ->willReturn(new Success(\strlen($packet)));
 
-            $client = new Rfc6455Client($socket, new Options, false);
+            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
             yield $client->sendBinary('data');
         });
@@ -161,7 +161,7 @@ class ClientTest extends TestCase
                 ->with($packet)
                 ->willReturn(new Success(\strlen($packet)));
 
-            $client = new Rfc6455Client($socket, new Options, false);
+            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
             $emitter = new Emitter;
             $emitter->emit('chunk1');
@@ -195,7 +195,7 @@ class ClientTest extends TestCase
                     }, $packets)
                 );
 
-            $client = new Rfc6455Client($socket, (new Options)->withStreamThreshold(10), false);
+            $client = new Rfc6455Client($socket, Options::createServerDefault()->withStreamThreshold(10), false);
 
             $emitter = new Emitter;
             $emitter->emit('chunk1');
