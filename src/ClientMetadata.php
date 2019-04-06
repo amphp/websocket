@@ -9,7 +9,10 @@ final class ClientMetadata
 {
     use Struct;
 
-    /** @var int */
+    /** @var string Next sequential client ID. */
+    private static $nextId = 'a';
+
+    /** @var string */
     public $id;
 
     /** @var bool */
@@ -68,9 +71,12 @@ final class ClientMetadata
      */
     public function __construct(Socket $socket, int $time, bool $compressionEnabled)
     {
+        $this->id = self::$nextId++;
+
         $resource = $socket->getResource();
-        $this->id = (int) $resource;
-        $this->cryptoInfo = \stream_get_meta_data($resource)["crypto"] ?? [];
+        if ($resource !== null) {
+            $this->cryptoInfo = \stream_get_meta_data($resource)["crypto"] ?? [];
+        }
         $this->isEncrypted = !empty($this->cryptoInfo);
         $this->connectedAt = $time;
         $this->compressionEnabled = $compressionEnabled;

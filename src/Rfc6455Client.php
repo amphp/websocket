@@ -174,7 +174,7 @@ final class Rfc6455Client implements Client
         return $this->nextMessageDeferred->promise();
     }
 
-    public function getId(): int
+    public function getId(): string
     {
         return $this->metadata->id;
     }
@@ -689,7 +689,7 @@ final class Rfc6455Client implements Client
     public function onClose(callable $callback): void
     {
         if ($this->onClose === null) {
-            Promise\rethrow(call($callback, $this, $this->closeCode, $this->closeReason));
+            Promise\rethrow(call($callback, $this, $this->metadata->closeCode, $this->metadata->closeReason));
             return;
         }
 

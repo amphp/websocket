@@ -30,6 +30,17 @@ class ClientTest extends TestCase
         return $socket;
     }
 
+    public function testGetId(): void
+    {
+        $socket = $this->createSocket();
+        $options = Options::createServerDefault();
+
+        $client1 = new Rfc6455Client($socket, $options, false);
+        $client2 = new Rfc6455Client($socket, $options, false);
+
+        $this->assertNotSame($client1->getId(), $client2->getId());
+    }
+
     public function testClose(): void
     {
         Loop::run(function () {
