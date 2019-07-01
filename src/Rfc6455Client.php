@@ -669,8 +669,10 @@ final class Rfc6455Client implements Client
             $onClose = $this->onClose;
             $this->onClose = null;
 
-            foreach ($onClose as $callback) {
-                Promise\rethrow(call($callback, $this, $code, $reason));
+            if ($onClose) {
+                foreach ($onClose as $callback) {
+                    Promise\rethrow(call($callback, $this, $code, $reason));
+                }
             }
 
             unset(self::$clients[$this->metadata->id]);
