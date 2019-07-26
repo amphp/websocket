@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket\Test;
 
-// 4-bit "random" mask
+// 4-byte "random" mask
 const MASK = "\xF4\x37\x7A\x9C";
 
 function compile(int $opcode, bool $masked, bool $isFinal, string $data = "", int $rsv = 0b000): string

@@ -10,7 +10,10 @@ use Amp\Deferred;
 use Amp\Emitter;
 use Amp\Loop;
 use Amp\Promise;
+use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
+use Amp\Socket\SocketAddress;
+use Amp\Socket\TlsInfo;
 use Amp\Success;
 use cash\LRUCache;
 use function Amp\call;
@@ -141,7 +144,7 @@ final class Rfc6455Client implements Client
             Loop::unreference(self::$watcher);
         }
 
-        $this->metadata = new ClientMetadata($socket, self::$now, $compression !== null);
+        $this->metadata = new ClientMetadata(self::$now, $compression !== null);
         self::$clients[$this->metadata->id] = $this;
 
         if ($this->options->isHeartbeatEnabled()) {
@@ -189,34 +192,19 @@ final class Rfc6455Client implements Client
         return !$this->metadata->closedAt;
     }
 
-    public function getLocalAddress(): string
+    public function getLocalAddress(): SocketAddress
     {
-        return $this->metadata->localAddress;
+        return $this->socket->getLocalAddress();
     }
 
-    public function getLocalPort(): ?int
+    public function getRemoteAddress(): SocketAddress
     {
-        return $this->metadata->localPort;
+        return $this->socket->getRemoteAddress();
     }
 
-    public function getRemoteAddress(): string
+    public function getTlsInfo(): ?TlsInfo
     {
-        return $this->metadata->remoteAddress;
-    }
-
-    public function getRemotePort(): ?int
-    {
-        return $this->metadata->remotePort;
-    }
-
-    public function isEncrypted(): bool
-    {
-        return !empty($this->metadata->cryptoInfo);
-    }
-
-    public function getCryptoContext(): array
-    {
-        return $this->metadata->cryptoInfo;
+        return $this->socket instanceof EncryptableSocket ? $this->socket->getTlsInfo() : null;
     }
 
     public function getCloseCode(): int

@@ -8,6 +8,7 @@ use Amp\Emitter;
 use Amp\Loop;
 use Amp\PHPUnit\TestCase;
 use Amp\Promise;
+use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Success;
 use Amp\Websocket\Code;
@@ -23,11 +24,7 @@ class ClientTest extends TestCase
      */
     protected function createSocket(): Socket
     {
-        $socket = $this->createMock(Socket::class);
-        $socket->method('getResource')
-            ->willReturn(\fopen('php://memory', 'r'));
-
-        return $socket;
+        return $this->createMock(EncryptableSocket::class);
     }
 
     public function testGetId(): void

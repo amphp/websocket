@@ -2,7 +2,6 @@
 
 namespace Amp\Websocket;
 
-use Amp\Socket\Socket;
 use Amp\Struct;
 
 final class ClientMetadata
@@ -46,55 +45,15 @@ final class ClientMetadata
     /** @var bool */
     public $compressionEnabled;
 
-    /** @var string */
-    public $localAddress;
-
-    /** @var int|null */
-    public $localPort;
-
-    /** @var string */
-    public $remoteAddress;
-
-    /** @var int|null */
-    public $remotePort;
-
-    /** @var bool */
-    public $isEncrypted;
-
-    /** @var mixed[] Array from stream_get_meta_data($this->socket)["crypto"] or an empty array. */
-    public $cryptoInfo = [];
-
     /**
-     * @param Socket $socket
      * @param int    $time Current timestamp.
      * @param bool   $compressionEnabled
      */
-    public function __construct(Socket $socket, int $time, bool $compressionEnabled)
+    public function __construct(int $time, bool $compressionEnabled)
     {
         $this->id = self::$nextId++;
 
-        $resource = $socket->getResource();
-        if ($resource !== null) {
-            $this->cryptoInfo = \stream_get_meta_data($resource)["crypto"] ?? [];
-        }
-        $this->isEncrypted = !empty($this->cryptoInfo);
         $this->connectedAt = $time;
         $this->compressionEnabled = $compressionEnabled;
-
-        $localName = (string) $socket->getLocalAddress();
-        if ($portStartPos = \strrpos($localName, ":")) {
-            $this->localAddress = \substr($localName, 0, $portStartPos);
-            $this->localPort = (int) \substr($localName, $portStartPos + 1);
-        } else {
-            $this->localAddress = $localName;
-        }
-
-        $remoteName = (string) $socket->getRemoteAddress();
-        if ($portStartPos = \strrpos($remoteName, ":")) {
-            $this->remoteAddress = \substr($remoteName, 0, $portStartPos);
-            $this->remotePort = (int) \substr($remoteName, $portStartPos + 1);
-        } else {
-            $this->remoteAddress = $localName;
-        }
     }
 }

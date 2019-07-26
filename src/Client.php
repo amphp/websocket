@@ -4,6 +4,8 @@ namespace Amp\Websocket;
 
 use Amp\ByteStream\InputStream;
 use Amp\Promise;
+use Amp\Socket\SocketAddress;
+use Amp\Socket\TlsInfo;
 
 interface Client
 {
@@ -28,37 +30,19 @@ interface Client
     public function isConnected(): bool;
 
     /**
-     * @return string The local IP address or unix socket path of the client.
+     * @return SocketAddress Local socket address.
      */
-    public function getLocalAddress(): string;
+    public function getLocalAddress(): SocketAddress;
 
     /**
-     * @return int|null The local port or null for unix sockets.
+     * @return SocketAddress Remote socket address.
      */
-    public function getLocalPort(): ?int;
+    public function getRemoteAddress(): SocketAddress;
 
     /**
-     * @return string The remote IP address or unix socket path of the client.
+     * @return TlsInfo|null TlsInfo object if connection is secure.
      */
-    public function getRemoteAddress(): string;
-
-    /**
-     * @return int|null The remote port or null for unix sockets.
-     */
-    public function getRemotePort(): ?int;
-
-    /**
-     * @return bool `true` if the client is encrypted, `false` if plaintext.
-     */
-    public function isEncrypted(): bool;
-
-    /**
-     * If the client is encrypted, returns the array returned from stream_get_meta_data($this->socket)["crypto"].
-     * Otherwise returns an empty array.
-     *
-     * @return array
-     */
-    public function getCryptoContext(): array;
+    public function getTlsInfo(): ?TlsInfo;
 
     /**
      * @return int Number of pings sent that have not been answered.

@@ -34,8 +34,6 @@ class ParserTest extends TestCase
                 ->willReturnCallback(function (string $data) {
                     return new Success(\strlen($data));
                 });
-            $socket->method('getResource')
-                ->willReturn(\fopen('php://memory', 'r'));
 
             $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 

@@ -31,7 +31,7 @@
         "php": ">=7.1",
         "amphp/amp": "^2",
         "amphp/byte-stream": "^1.5",
-        "amphp/socket": "^0.10",
+        "amphp/socket": "dev-master as 1.0",
         "cash/lrucache": "^1.0"
     },
     "require-dev": {

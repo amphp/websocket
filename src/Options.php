@@ -29,7 +29,7 @@ final class Options
     }
 
     /**
-     * Creates an Options object with values as documented on the accessor methods except for the following:
+     * Creates an Options object with values as documented on the accessor methods except for the changes below.
      *
      * Compression is enabled if the zlib extension is installed.
      * Bytes per second limit is set to PHP_INT_MAX (effectively removing the limit).
