@@ -177,7 +177,7 @@ final class Rfc6455Client implements Client
         return $this->nextMessageDeferred->promise();
     }
 
-    public function getId(): string
+    public function getId(): int
     {
         return $this->metadata->id;
     }

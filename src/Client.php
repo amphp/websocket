@@ -19,9 +19,9 @@ interface Client
     public function receive(): Promise;
 
     /**
-     * @return string Unique identifier for the client.
+     * @return int Unique identifier for the client.
      */
-    public function getId(): string;
+    public function getId(): int;
 
     /**
      * @return bool True if the client is still connected, false otherwise. Returns false as soon as the closing

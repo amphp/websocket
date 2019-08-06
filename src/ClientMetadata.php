@@ -8,10 +8,10 @@ final class ClientMetadata
 {
     use Struct;
 
-    /** @var string Next sequential client ID. */
-    private static $nextId = 'a';
+    /** @var int Next sequential client ID. */
+    private static $nextId = 1;
 
-    /** @var string */
+    /** @var int */
     public $id;
 
     /** @var bool */
