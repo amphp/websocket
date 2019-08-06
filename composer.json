@@ -35,7 +35,7 @@
         "cash/lrucache": "^1"
     },
     "require-dev": {
-        "phpunit/phpunit": "^6",
+        "phpunit/phpunit": "^7",
         "amphp/phpunit-util": "^1",
         "amphp/php-cs-fixer-config": "dev-master"
     },

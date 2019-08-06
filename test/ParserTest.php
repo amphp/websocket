@@ -3,8 +3,7 @@
 namespace Amp\Websocket\Test;
 
 use Amp\Delayed;
-use Amp\Loop;
-use Amp\PHPUnit\TestCase;
+use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket\Socket;
 use Amp\Success;
 use Amp\Websocket\ClosedException;
@@ -14,7 +13,7 @@ use Amp\Websocket\Opcode;
 use Amp\Websocket\Options;
 use Amp\Websocket\Rfc6455Client;
 
-class ParserTest extends TestCase
+class ParserTest extends AsyncTestCase
 {
     /**
      * @dataProvider provideParserData
@@ -25,34 +24,32 @@ class ParserTest extends TestCase
         bool $isBinary,
         ?string $reason = null,
         ?int $code = null
-    ): void {
-        Loop::run(function () use ($chunk, $data, $isBinary, $code, $reason) {
-            $socket = $this->createMock(Socket::class);
-            $socket->method('read')
-                ->willReturnOnConsecutiveCalls(new Success($chunk), new Delayed(1, null));
-            $socket->method('write')
-                ->willReturnCallback(function (string $data) {
-                    return new Success(\strlen($data));
-                });
+    ): \Generator {
+        $socket = $this->createMock(Socket::class);
+        $socket->method('read')
+            ->willReturnOnConsecutiveCalls(new Success($chunk), new Delayed(1, null));
+        $socket->method('write')
+            ->willReturnCallback(function (string $data) {
+                return new Success(\strlen($data));
+            });
 
-            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-            try {
-                while ($message = yield $client->receive()) {
-                    \assert($message instanceof Message);
-                    $this->assertSame($data, yield $message->buffer());
-                    $this->assertSame(!$isBinary, $message->isText());
-                    $this->assertSame($isBinary, $message->isBinary());
-                    $client->close();
-                }
-            } catch (ClosedException $exception) {
-                $this->assertSame($code, $exception->getCode());
-                $this->assertSame($reason, $exception->getReason());
+        try {
+            while ($message = yield $client->receive()) {
+                \assert($message instanceof Message);
+                $this->assertSame($data, yield $message->buffer());
+                $this->assertSame(!$isBinary, $message->isText());
+                $this->assertSame($isBinary, $message->isBinary());
+                $client->close();
             }
+        } catch (ClosedException $exception) {
+            $this->assertSame($code, $exception->getCode());
+            $this->assertSame($reason, $exception->getReason());
+        }
 
-            $this->assertSame($code ?? Code::NORMAL_CLOSE, $client->getCloseCode());
-            $this->assertSame($reason ?? '', $client->getCloseReason());
-        });
+        $this->assertSame($code ?? Code::NORMAL_CLOSE, $client->getCloseCode());
+        $this->assertSame($reason ?? '', $client->getCloseReason());
     }
 
     public function provideParserData(): array

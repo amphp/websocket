@@ -6,7 +6,7 @@ use Amp\ByteStream\IteratorStream;
 use Amp\Delayed;
 use Amp\Emitter;
 use Amp\Loop;
-use Amp\PHPUnit\TestCase;
+use Amp\PHPUnit\AsyncTestCase;
 use Amp\Promise;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
@@ -17,7 +17,7 @@ use Amp\Websocket\Options;
 use Amp\Websocket\Rfc6455Client;
 use PHPUnit\Framework\MockObject\MockObject;
 
-class ClientTest extends TestCase
+class ClientTest extends AsyncTestCase
 {
     /**
      * @return Socket|MockObject
@@ -38,183 +38,169 @@ class ClientTest extends TestCase
         $this->assertNotSame($client1->getId(), $client2->getId());
     }
 
-    public function testClose(): void
+    public function testClose(): \Generator
     {
-        Loop::run(function () {
-            $code = Code::PROTOCOL_ERROR;
-            $reason = 'Close reason';
+        $code = Code::PROTOCOL_ERROR;
+        $reason = 'Close reason';
 
-            $socket = $this->createSocket();
-            $packet = compile(Opcode::CLOSE, false, true, \pack('n', $code) . $reason);
-            $socket->expects($this->once())
-                ->method('write')
-                ->with($packet)
-                ->willReturn(new Success(\strlen($packet)));
+        $socket = $this->createSocket();
+        $packet = compile(Opcode::CLOSE, false, true, \pack('n', $code) . $reason);
+        $socket->expects($this->once())
+            ->method('write')
+            ->with($packet)
+            ->willReturn(new Success(\strlen($packet)));
 
-            $socket->expects($this->exactly(2))
-                ->method('read')
-                ->willReturnOnConsecutiveCalls(
-                    new Delayed(0, compile(Opcode::CLOSE, true, true, \pack('n', $code) . $reason)),
-                    new Success
-                );
+        $socket->expects($this->exactly(2))
+            ->method('read')
+            ->willReturnOnConsecutiveCalls(
+                new Delayed(0, compile(Opcode::CLOSE, true, true, \pack('n', $code) . $reason)),
+                new Success
+            );
 
-            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-            yield $client->close($code, $reason);
+        yield $client->close($code, $reason);
 
-            $this->assertFalse($client->isConnected());
-            $this->assertFalse($client->didPeerInitiateClose());
-            $this->assertSame($code, $client->getCloseCode());
-            $this->assertSame($reason, $client->getCloseReason());
-        });
+        $this->assertFalse($client->isConnected());
+        $this->assertFalse($client->didPeerInitiateClose());
+        $this->assertSame($code, $client->getCloseCode());
+        $this->assertSame($reason, $client->getCloseReason());
     }
 
-    public function testCloseWithoutResponse(): void
+    public function testCloseWithoutResponse(): \Generator
     {
-        Loop::run(function () {
-            $code = Code::NORMAL_CLOSE;
-            $reason = 'Close reason';
+        $code = Code::NORMAL_CLOSE;
+        $reason = 'Close reason';
 
-            $socket = $this->createSocket();
-            $packet = compile(Opcode::CLOSE, false, true, \pack('n', $code) . $reason);
-            $socket->expects($this->once())
-                ->method('write')
-                ->with($packet)
-                ->willReturn(new Success(\strlen($packet)));
+        $socket = $this->createSocket();
+        $packet = compile(Opcode::CLOSE, false, true, \pack('n', $code) . $reason);
+        $socket->expects($this->once())
+            ->method('write')
+            ->with($packet)
+            ->willReturn(new Success(\strlen($packet)));
 
-            $socket->expects($this->once())
-                ->method('read')
-                ->willReturn(new Delayed(1200));
+        $socket->expects($this->once())
+            ->method('read')
+            ->willReturn(new Delayed(1200));
 
-            $client = new Rfc6455Client($socket, Options::createServerDefault()->withClosePeriod(1), false);
+        $client = new Rfc6455Client($socket, Options::createServerDefault()->withClosePeriod(1), false);
 
-            $invoked = false;
-            $client->onClose(function () use (&$invoked) {
-                $invoked = true;
-            });
-
-            Loop::delay(1100, function () use (&$invoked) {
-                if (!$invoked) {
-                    $this->fail("Close timeout period not enforced");
-                }
-            });
-
-            yield $client->close($code, $reason);
-
-            $this->assertFalse($client->isConnected());
-            $this->assertFalse($client->didPeerInitiateClose());
-            $this->assertSame($code, $client->getCloseCode());
-            $this->assertSame($reason, $client->getCloseReason());
-
-            $this->assertTrue($invoked);
+        $invoked = false;
+        $client->onClose(function () use (&$invoked) {
+            $invoked = true;
         });
+
+        Loop::delay(1100, function () use (&$invoked) {
+            if (!$invoked) {
+                $this->fail("Close timeout period not enforced");
+            }
+        });
+
+        yield $client->close($code, $reason);
+
+        $this->assertFalse($client->isConnected());
+        $this->assertFalse($client->didPeerInitiateClose());
+        $this->assertSame($code, $client->getCloseCode());
+        $this->assertSame($reason, $client->getCloseReason());
+
+        $this->assertTrue($invoked);
     }
 
 
-    public function testPing(): void
+    public function testPing(): \Generator
     {
-        Loop::run(function () {
-            $socket = $this->createSocket();
-            $packet = compile(Opcode::PING, false, true, '1');
-            $socket->expects($this->once())
-                ->method('write')
-                ->with($packet)
-                ->willReturn(new Success(\strlen($packet)));
+        $socket = $this->createSocket();
+        $packet = compile(Opcode::PING, false, true, '1');
+        $socket->expects($this->once())
+            ->method('write')
+            ->with($packet)
+            ->willReturn(new Success(\strlen($packet)));
 
-            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-            yield $client->ping();
-        });
+        yield $client->ping();
     }
 
-    public function testSend(): void
+    public function testSend(): \Generator
     {
-        Loop::run(function () {
-            $socket = $this->createSocket();
-            $packet = compile(Opcode::TEXT, false, true, 'data');
-            $socket->expects($this->once())
-                ->method('write')
-                ->with($packet)
-                ->willReturn(new Success(\strlen($packet)));
+        $socket = $this->createSocket();
+        $packet = compile(Opcode::TEXT, false, true, 'data');
+        $socket->expects($this->once())
+            ->method('write')
+            ->with($packet)
+            ->willReturn(new Success(\strlen($packet)));
 
-            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-            yield $client->send('data');
-        });
+        yield $client->send('data');
     }
 
-    public function testSendBinary(): void
+    public function testSendBinary(): \Generator
     {
-        Loop::run(function () {
-            $socket = $this->createSocket();
-            $packet = compile(Opcode::BIN, false, true, 'data');
-            $socket->expects($this->once())
-                ->method('write')
-                ->with($packet)
-                ->willReturn(new Success(\strlen($packet)));
+        $socket = $this->createSocket();
+        $packet = compile(Opcode::BIN, false, true, 'data');
+        $socket->expects($this->once())
+            ->method('write')
+            ->with($packet)
+            ->willReturn(new Success(\strlen($packet)));
 
-            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-            yield $client->sendBinary('data');
-        });
+        yield $client->sendBinary('data');
     }
 
-    public function testStream(): void
+    public function testStream(): \Generator
     {
-        Loop::run(function () {
-            $socket = $this->createSocket();
-            $packet = compile(Opcode::TEXT, false, true, 'chunk1chunk2chunk3');
-            $socket->expects($this->once())
-                ->method('write')
-                ->with($packet)
-                ->willReturn(new Success(\strlen($packet)));
+        $socket = $this->createSocket();
+        $packet = compile(Opcode::TEXT, false, true, 'chunk1chunk2chunk3');
+        $socket->expects($this->once())
+            ->method('write')
+            ->with($packet)
+            ->willReturn(new Success(\strlen($packet)));
 
-            $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-            $emitter = new Emitter;
-            $emitter->emit('chunk1');
-            $emitter->emit('chunk2');
-            $emitter->emit('chunk3');
-            $emitter->complete();
+        $emitter = new Emitter;
+        $emitter->emit('chunk1');
+        $emitter->emit('chunk2');
+        $emitter->emit('chunk3');
+        $emitter->complete();
 
-            $stream = new IteratorStream($emitter->iterate());
+        $stream = new IteratorStream($emitter->iterate());
 
-            yield $client->stream($stream);
-        });
+        yield $client->stream($stream);
     }
 
-    public function testStreamMultipleChunks(): void
+    public function testStreamMultipleChunks(): \Generator
     {
-        Loop::run(function () {
-            $packets = [
-                compile(Opcode::TEXT, false, false, 'chunk1chunk2'),
-                compile(Opcode::CONT, false, true, 'chunk3'),
-            ];
+        $packets = [
+            compile(Opcode::TEXT, false, false, 'chunk1chunk2'),
+            compile(Opcode::CONT, false, true, 'chunk3'),
+        ];
 
-            $socket = $this->createSocket();
-            $socket->expects($this->exactly(2))
-                ->method('write')
-                ->withConsecutive(...\array_map(function (string $packet) {
-                    return [$packet];
-                }, $packets))
-                ->willReturnOnConsecutiveCalls(
-                    ...\array_map(function (string $packet): Promise {
-                        return new Success(\strlen($packet));
-                    }, $packets)
-                );
+        $socket = $this->createSocket();
+        $socket->expects($this->exactly(2))
+            ->method('write')
+            ->withConsecutive(...\array_map(function (string $packet) {
+                return [$packet];
+            }, $packets))
+            ->willReturnOnConsecutiveCalls(
+                ...\array_map(function (string $packet): Promise {
+                    return new Success(\strlen($packet));
+                }, $packets)
+            );
 
-            $client = new Rfc6455Client($socket, Options::createServerDefault()->withStreamThreshold(10), false);
+        $client = new Rfc6455Client($socket, Options::createServerDefault()->withStreamThreshold(10), false);
 
-            $emitter = new Emitter;
-            $emitter->emit('chunk1');
-            $emitter->emit('chunk2');
-            $emitter->emit('chunk');
-            $emitter->emit('3');
-            $emitter->complete();
+        $emitter = new Emitter;
+        $emitter->emit('chunk1');
+        $emitter->emit('chunk2');
+        $emitter->emit('chunk');
+        $emitter->emit('3');
+        $emitter->complete();
 
-            $stream = new IteratorStream($emitter->iterate());
+        $stream = new IteratorStream($emitter->iterate());
 
-            yield $client->stream($stream);
-        });
+        yield $client->stream($stream);
     }
 }
