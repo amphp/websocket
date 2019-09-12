@@ -282,7 +282,7 @@ final class Rfc6455Client implements Client
                 }
             }
         } catch (\Throwable $exception) {
-            // Ignore stream exception, connection will be closed below anyway.
+            $message = 'TCP connection closed with exception: ' . $exception->getMessage();
         }
 
         if ($this->closeDeferred !== null) {
@@ -292,7 +292,8 @@ final class Rfc6455Client implements Client
         }
 
         if (!$this->metadata->closedAt) {
-            $this->close(Code::ABNORMAL_CLOSE, 'Underlying TCP connection closed');
+            $this->metadata->peerInitiatedClose = true;
+            $this->close(Code::ABNORMAL_CLOSE, $message ?? 'TCP connection closed unexpectedly');
         }
     }
 
