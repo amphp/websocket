@@ -142,7 +142,8 @@ interface Client
      * @param int    $code
      * @param string $reason
      *
-     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
+     * @return Promise<[int, string]> Resolves with an array containing the close code used and the close reason.
+     *                                These may differ from those provided if the connection was closed prior.
      */
     public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): Promise;
 

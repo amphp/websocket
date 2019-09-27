@@ -70,7 +70,7 @@ class ParserTest extends AsyncTestCase
 
         foreach (["" /* 14 */, "Hello world!" /* 15 */, "\x00\xff\xfe\xfd\xfc\xfb\x00\xff" /* 16 */, \str_repeat("*", 125) /* 17 */] as $data) {
             $input = compile(Opcode::PING, true, true, $data);
-            $return[] = [$input, null, false, "Underlying TCP connection closed", Code::ABNORMAL_CLOSE];
+            $return[] = [$input, null, false, "TCP connection closed unexpectedly", Code::ABNORMAL_CLOSE];
         }
 
         // 18 ---- error conditions: using a non-terminated frame with a control opcode ----------->
@@ -184,12 +184,12 @@ class ParserTest extends AsyncTestCase
         // 44 ---- pong frame --------------------------------------------------------------------->
 
         $input = compile(Opcode::PONG, true, true, "123");
-        $return[] = [$input, null, true, "Underlying TCP connection closed", Code::ABNORMAL_CLOSE];
+        $return[] = [$input, null, true, "TCP connection closed unexpectedly", Code::ABNORMAL_CLOSE];
 
         // 45 ---- pong frame with invalid payload ------------------------------------------------>
 
         $input = compile(Opcode::PONG, true, true, "0");
-        $return[] = [$input, null, true, "Underlying TCP connection closed", Code::ABNORMAL_CLOSE];
+        $return[] = [$input, null, true, "TCP connection closed unexpectedly", Code::ABNORMAL_CLOSE];
 
         // x -------------------------------------------------------------------------------------->
 

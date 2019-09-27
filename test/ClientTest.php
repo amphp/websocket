@@ -3,6 +3,7 @@
 namespace Amp\Websocket\Test;
 
 use Amp\ByteStream\IteratorStream;
+use Amp\Deferred;
 use Amp\Delayed;
 use Amp\Emitter;
 use Amp\Loop;
@@ -59,12 +60,14 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        yield $client->close($code, $reason);
+        [$reportedCode, $reportedReason] = yield $client->close($code, $reason);
 
         $this->assertFalse($client->isConnected());
         $this->assertFalse($client->didPeerInitiateClose());
         $this->assertSame($code, $client->getCloseCode());
         $this->assertSame($reason, $client->getCloseReason());
+        $this->assertSame($code, $reportedCode);
+        $this->assertSame($reason, $reportedReason);
     }
 
     public function testCloseWithoutResponse(): \Generator
@@ -202,5 +205,56 @@ class ClientTest extends AsyncTestCase
         $stream = new IteratorStream($emitter->iterate());
 
         yield $client->stream($stream);
+    }
+
+    public function testMultipleClose(): \Generator
+    {
+        $this->setMinimumRuntime(1000);
+        $this->setTimeout(1100);
+
+        // Dummy watcher to keep loop running while waiting on timeout in Rfc6455Client::close().
+        $watcher = Loop::delay(2000, function (): void {
+            $this->fail('Dummy watcher should not be invoked');
+        });
+
+        $socket = $this->createSocket();
+
+        $deferred = new Deferred;
+
+        $socket->method('read')
+            ->willReturn($deferred->promise());
+
+        $socket->expects($this->once())
+            ->method('write')
+            ->willReturn(new Success);
+
+        $socket->expects($this->once())
+            ->method('close')
+            ->willReturnCallback(function () use ($deferred): void {
+                $deferred->resolve();
+            });
+
+        $client = new Rfc6455Client($socket, Options::createServerDefault()->withClosePeriod(1), false);
+
+        $client->onClose($this->createCallback(1));
+
+        $promise1 = $client->close(Code::NORMAL_CLOSE, 'First close');
+        $promise2 = $client->close(Code::ABNORMAL_CLOSE, 'Second close');
+
+        try {
+            [[$code1, $reason1], [$code2, $reason2]] = yield [$promise1, $promise2];
+        } finally {
+            Loop::cancel($watcher);
+        }
+
+        // First close code should be used, second is ignored.
+        $this->assertSame(Code::NORMAL_CLOSE, $client->getCloseCode());
+        $this->assertSame('First close', $client->getCloseReason());
+
+        $this->assertSame(Code::NORMAL_CLOSE, $code1);
+        $this->assertSame('First close', $reason1);
+
+        $this->assertSame(Code::NORMAL_CLOSE, $code2);
+        $this->assertSame('First close', $reason2);
     }
 }

@@ -77,7 +77,7 @@ final class Rfc6455Client implements Client
     /** @var ClientMetadata */
     private $metadata;
 
-    /** @var Deferred */
+    /** @var Deferred|null */
     private $closeDeferred;
 
     /**
@@ -260,6 +260,7 @@ final class Rfc6455Client implements Client
                 }
 
                 $this->metadata->lastReadAt = self::$now;
+                $this->metadata->bytesRead += \strlen($chunk);
                 self::$bytesReadInLastSecond[$this->metadata->id] = (self::$bytesReadInLastSecond[$this->metadata->id] ?? 0) + \strlen($chunk);
 
                 if ($heartbeatEnabled) {
@@ -616,12 +617,10 @@ final class Rfc6455Client implements Client
     public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): Promise
     {
         if ($this->metadata->closedAt) {
-            return new Success(0);
+            return new Success([$this->metadata->closeCode, $this->metadata->closeReason]);
         }
 
         return call(function () use ($code, $reason) {
-            $bytes = 0;
-
             try {
                 \assert($code !== Code::NONE || $reason === '');
                 $promise = $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
@@ -642,9 +641,10 @@ final class Rfc6455Client implements Client
                     $deferred->resolve();
                 }
 
-                $bytes = yield $promise;
+                yield $promise; // Wait for writing close frame to complete.
 
                 if ($this->closeDeferred !== null) {
+                    // Wait for peer close frame for configured number of seconds.
                     yield Promise\timeout($this->closeDeferred->promise(), $this->options->getClosePeriod() * 1000);
                 }
             } catch (\Throwable $exception) {
@@ -671,7 +671,7 @@ final class Rfc6455Client implements Client
                 self::$heartbeatTimeouts = null;
             }
 
-            return $bytes;
+            return [$this->metadata->closeCode, $this->metadata->closeReason];
         });
     }
 
