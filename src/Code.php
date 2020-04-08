@@ -22,6 +22,32 @@ final class Code
     public const TLS_HANDSHAKE_FAILURE = 1015;
 
     /**
+     * @param int $code Close code.
+     *
+     * @return string|null Constant name corresponding to the given code or null if the code is undefined.
+     */
+    public static function getName(int $code): ?string
+    {
+        return [
+            self::NORMAL_CLOSE => 'NORMAL_CLOSE',
+            self::GOING_AWAY => 'GOING_AWAY',
+            self::PROTOCOL_ERROR => 'PROTOCOL_ERROR',
+            self::UNACCEPTABLE_TYPE => 'UNACCEPTABLE_TYPE',
+            self::NONE => 'NONE',
+            self::ABNORMAL_CLOSE => 'ABNORMAL_CLOSE',
+            self::INCONSISTENT_FRAME_DATA_TYPE => 'INCONSISTENT_FRAME_DATA_TYPE',
+            self::POLICY_VIOLATION => 'POLICY_VIOLATION',
+            self::MESSAGE_TOO_LARGE => 'MESSAGE_TOO_LARGE',
+            self::EXPECTED_EXTENSION_MISSING => 'EXPECTED_EXTENSION_MISSING',
+            self::UNEXPECTED_SERVER_ERROR => 'UNEXPECTED_SERVER_ERROR',
+            self::SERVICE_RESTARTING => 'SERVICE_RESTARTING',
+            self::TRY_AGAIN_LATER => 'TRY_AGAIN_LATER',
+            self::BAD_GATEWAY => 'BAD_GATEWAY',
+            self::TLS_HANDSHAKE_FAILURE => 'TLS_HANDSHAKE_FAILURE',
+        ][$code] ?? null;
+    }
+
+    /**
      * @codeCoverageIgnore Class cannot be instigated.
      */
     private function __construct()

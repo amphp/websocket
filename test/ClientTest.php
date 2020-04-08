@@ -12,6 +12,7 @@ use Amp\Promise;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Success;
+use Amp\Websocket\ClosedException;
 use Amp\Websocket\Code;
 use Amp\Websocket\Opcode;
 use Amp\Websocket\Options;
@@ -60,6 +61,8 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
+        $promise = $client->receive(); // Promise should fail due to abnormal close.
+
         [$reportedCode, $reportedReason] = yield $client->close($code, $reason);
 
         $this->assertFalse($client->isConnected());
@@ -68,6 +71,11 @@ class ClientTest extends AsyncTestCase
         $this->assertSame($reason, $client->getCloseReason());
         $this->assertSame($code, $reportedCode);
         $this->assertSame($reason, $reportedReason);
+
+        $this->expectException(ClosedException::class);
+        $this->expectExceptionMessage('Connection closed');
+
+        yield $promise; // Should throw a ClosedException.
     }
 
     public function testCloseWithoutResponse(): \Generator
@@ -99,6 +107,8 @@ class ClientTest extends AsyncTestCase
             }
         });
 
+        $promise = $client->receive(); // Promise should resolve with null on normal close.
+
         yield $client->close($code, $reason);
 
         $this->assertFalse($client->isConnected());
@@ -107,6 +117,8 @@ class ClientTest extends AsyncTestCase
         $this->assertSame($reason, $client->getCloseReason());
 
         $this->assertTrue($invoked);
+
+        $this->assertNull(yield $promise);
     }
 
 

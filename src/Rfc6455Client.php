@@ -638,7 +638,22 @@ final class Rfc6455Client implements Client
                 if ($this->nextMessageDeferred) {
                     $deferred = $this->nextMessageDeferred;
                     $this->nextMessageDeferred = null;
-                    $deferred->resolve();
+
+                    switch ($code) {
+                        case Code::NORMAL_CLOSE:
+                        case Code::NONE:
+                            $deferred->resolve();
+                            break;
+
+                        default:
+                            $deferred->fail(new ClosedException(\sprintf(
+                                'Connection closed with code %d (%s) and reason message "%s"',
+                                $code,
+                                Code::getName($code) ?? 'Unknown code',
+                                $reason
+                            ), $code, $reason));
+                            break;
+                    }
                 }
 
                 yield $promise; // Wait for writing close frame to complete.
