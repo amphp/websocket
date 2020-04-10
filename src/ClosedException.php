@@ -9,7 +9,14 @@ final class ClosedException extends \Exception
 
     public function __construct(string $message, int $code, string $reason)
     {
-        parent::__construct($message, $code);
+        parent::__construct(\sprintf(
+            '%s; Code %s (%s); Reason: "%s"',
+            $message,
+            $code,
+            Code::getName($code) ?? 'Unknown code',
+            $reason
+        ), $code);
+
         $this->reason = $reason;
     }
 

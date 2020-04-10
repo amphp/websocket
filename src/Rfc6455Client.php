@@ -632,7 +632,11 @@ final class Rfc6455Client implements Client
                 if ($this->currentMessageEmitter) {
                     $emitter = $this->currentMessageEmitter;
                     $this->currentMessageEmitter = null;
-                    $emitter->fail(new ClosedException('Connection closed while streaming message body', $code, $reason));
+                    $emitter->fail(new ClosedException(
+                        'Connection closed while streaming message body',
+                        $code,
+                        $reason
+                    ));
                 }
 
                 if ($this->nextMessageDeferred) {
@@ -646,12 +650,11 @@ final class Rfc6455Client implements Client
                             break;
 
                         default:
-                            $deferred->fail(new ClosedException(\sprintf(
-                                'Connection closed with code %d (%s) and reason message "%s"',
+                            $deferred->fail(new ClosedException(
+                                'Connection closed abnormally while awaiting message',
                                 $code,
-                                Code::getName($code) ?? 'Unknown code',
                                 $reason
-                            ), $code, $reason));
+                            ));
                             break;
                     }
                 }
