@@ -476,33 +476,33 @@ final class Rfc6455Client implements Client
             $compress = true;
         }
 
-        try {
-            $bytes = 0;
+        $bytes = 0;
 
+        try {
             if (\strlen($data) > $this->options->getFrameSplitThreshold()) {
                 $length = \strlen($data);
                 $slices = (int) \ceil($length / $this->options->getFrameSplitThreshold());
                 $length = (int) \ceil($length / $slices);
 
-                while ($data !== '') {
+                for ($i = 1; $i < $slices; ++$i) {
                     $chunk = \substr($data, 0, $length);
                     $data = (string) \substr($data, $length);
 
                     if ($compress) {
-                        $chunk = $this->compressionContext->compress($chunk, $data === '');
+                        $chunk = $this->compressionContext->compress($chunk, false);
                     }
 
-                    $bytes += yield $this->write($chunk, $opcode, $rsv, $data === '');
+                    $bytes += yield $this->write($chunk, $opcode, $rsv, false);
                     $opcode = Opcode::CONT;
                     $rsv = 0; // RSV must be 0 in continuation frames.
                 }
-            } else {
-                if ($compress) {
-                    $data = $this->compressionContext->compress($data, true);
-                }
-
-                $bytes = yield $this->write($data, $opcode, $rsv, true);
             }
+
+            if ($compress) {
+                $data = $this->compressionContext->compress($data, true);
+            }
+
+            $bytes += yield $this->write($data, $opcode, $rsv, true);
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
