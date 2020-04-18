@@ -17,11 +17,12 @@ use Amp\Socket\TlsInfo;
 use Amp\Success;
 use cash\LRUCache;
 use function Amp\call;
+use function Amp\getCurrentTime;
 
 final class Rfc6455Client implements Client
 {
     /** @var self[] */
-    private static $clients;
+    private static $clients = [];
 
     /** @var int[] */
     private static $bytesReadInLastSecond = [];
@@ -32,10 +33,10 @@ final class Rfc6455Client implements Client
     /** @var Deferred[] */
     private static $rateDeferreds = [];
 
-    /** @var string */
+    /** @var string|null */
     private static $watcher;
 
-    /** @var LRUCache Array of next ping (heartbeat) times. */
+    /** @var LRUCache Least-recently-used cache of next ping (heartbeat) times. */
     private static $heartbeatTimeouts;
 
     /** @var int Cached current time. */
@@ -44,10 +45,10 @@ final class Rfc6455Client implements Client
     /** @var Options */
     private $options;
 
-    /** @var \Amp\Socket\Socket */
+    /** @var Socket */
     private $socket;
 
-    /** @var \Amp\Promise|null */
+    /** @var Promise|null */
     private $lastWrite;
 
     /** @var Promise|null */
@@ -99,7 +100,7 @@ final class Rfc6455Client implements Client
         $this->closeDeferred = new Deferred;
 
         if (self::$watcher === null) {
-            self::$now = \time();
+            self::$now = getCurrentTime();
             self::$heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
                 public function getIterator(): \Iterator
                 {
@@ -108,7 +109,7 @@ final class Rfc6455Client implements Client
             };
 
             self::$watcher = Loop::repeat(1000, static function (): void {
-                self::$now = \time();
+                self::$now = getCurrentTime();
 
                 self::$bytesReadInLastSecond = [];
                 self::$framesReadInLastSecond = [];
@@ -389,11 +390,13 @@ final class Rfc6455Client implements Client
                     $reason = \substr($data, 2);
 
                     if ($code < 1000 // Reserved and unused.
-                        || ($code >= 1004 && $code <= 1006) // Should not be sent over wire.
-                        || ($code >= 1014 && $code <= 1015) // Should not be sent over wire.
-                        || ($code >= 1016 && $code <= 1999) // Reserved for future use
-                        || ($code >= 2000 && $code <= 2999) // Reserved for WebSocket extensions.
-                        || $code >= 5000 // 3000-3999 for libraries, 4000-4999 for applications, >= 5000 invalid.
+                        || ($code >= 1004 && $code <= 1006) // Should not be sent over wire
+                        || ($code >= 1014 && $code <= 1015) // Should not be sent over wire
+                        || ($code >= 1016 && $code <= 1999) // Disallowed, reserved for future use
+                        || ($code >= 2000 && $code <= 2999) // Disallowed, reserved for Websocket extensions
+                        // 3000-3999 allowed, reserved for libraries
+                        // 4000-4999 allowed, reserved for applications
+                        || $code >= 5000 // >= 5000 invalid
                     ) {
                         $code = Code::PROTOCOL_ERROR;
                         $reason = 'Invalid close code';
