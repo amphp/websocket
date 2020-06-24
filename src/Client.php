@@ -76,7 +76,7 @@ interface Client
      *
      * @param string $data Payload to send.
      *
-     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
+     * @return Promise<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
@@ -87,7 +87,7 @@ interface Client
      *
      * @param string $data Payload to send.
      *
-     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
+     * @return Promise<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
@@ -99,7 +99,7 @@ interface Client
      *
      * @param InputStream $stream
      *
-     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
+     * @return Promise<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
@@ -111,7 +111,7 @@ interface Client
      *
      * @param InputStream $stream
      *
-     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
+     * @return Promise<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */

@@ -484,8 +484,6 @@ final class Rfc6455Client implements Client
             $compress = true;
         }
 
-        $bytes = 0;
-
         try {
             if (\strlen($data) > $this->options->getFrameSplitThreshold()) {
                 $length = \strlen($data);
@@ -500,7 +498,7 @@ final class Rfc6455Client implements Client
                         $chunk = $this->compressionContext->compress($chunk, false);
                     }
 
-                    $bytes += yield $this->write($chunk, $opcode, $rsv, false);
+                    yield $this->write($chunk, $opcode, $rsv, false);
                     $opcode = Opcode::CONT;
                     $rsv = 0; // RSV must be 0 in continuation frames.
                 }
@@ -510,15 +508,13 @@ final class Rfc6455Client implements Client
                 $data = $this->compressionContext->compress($data, true);
             }
 
-            $bytes += yield $this->write($data, $opcode, $rsv, true);
+            yield $this->write($data, $opcode, $rsv, true);
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
             yield $this->close($code, $reason);
             throw new ClosedException('Client unexpectedly closed', $code, $reason);
         }
-
-        return $bytes;
     }
 
     private function sendStream(InputStream $stream, int $opcode): \Generator
@@ -542,7 +538,6 @@ final class Rfc6455Client implements Client
                 return yield $this->write('', $opcode, 0, true);
             }
 
-            $written = 0;
             $streamThreshold = $this->options->getStreamThreshold();
 
             while (($chunk = yield $stream->read()) !== null) {
@@ -559,7 +554,7 @@ final class Rfc6455Client implements Client
                     $buffer = $this->compressionContext->compress($buffer, false);
                 }
 
-                $written += yield $this->write($buffer, $opcode, $rsv, false);
+                yield $this->write($buffer, $opcode, $rsv, false);
                 $opcode = Opcode::CONT;
                 $rsv = 0; // RSV must be 0 in continuation frames.
 
@@ -570,7 +565,7 @@ final class Rfc6455Client implements Client
                 $buffer = $this->compressionContext->compress($buffer, true);
             }
 
-            $written += yield $this->write($buffer, $opcode, $rsv, true);
+            yield $this->write($buffer, $opcode, $rsv, true);
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
@@ -580,8 +575,6 @@ final class Rfc6455Client implements Client
             yield $this->close(Code::UNEXPECTED_SERVER_ERROR, 'Error while reading message data');
             throw $exception;
         }
-
-        return $written;
     }
 
     private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): Promise
