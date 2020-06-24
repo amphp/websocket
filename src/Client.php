@@ -68,7 +68,7 @@ interface Client
      *
      * @throws \Error Thrown if the client has not closed.
      */
-    public function didPeerInitiateClose(): bool;
+    public function isClosedByPeer(): bool;
 
     /**
      * Sends a text message to the endpoint. All data sent with this method must be valid UTF-8. Use `sendBinary()` if

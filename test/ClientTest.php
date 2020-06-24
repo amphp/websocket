@@ -66,7 +66,7 @@ class ClientTest extends AsyncTestCase
         [$reportedCode, $reportedReason] = yield $client->close($code, $reason);
 
         $this->assertFalse($client->isConnected());
-        $this->assertFalse($client->didPeerInitiateClose());
+        $this->assertFalse($client->isClosedByPeer());
         $this->assertSame($code, $client->getCloseCode());
         $this->assertSame($reason, $client->getCloseReason());
         $this->assertSame($code, $reportedCode);
@@ -112,7 +112,7 @@ class ClientTest extends AsyncTestCase
         yield $client->close($code, $reason);
 
         $this->assertFalse($client->isConnected());
-        $this->assertFalse($client->didPeerInitiateClose());
+        $this->assertFalse($client->isClosedByPeer());
         $this->assertSame($code, $client->getCloseCode());
         $this->assertSame($reason, $client->getCloseReason());
 

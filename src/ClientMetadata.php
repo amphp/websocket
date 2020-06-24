@@ -15,7 +15,7 @@ final class ClientMetadata
     public $id;
 
     /** @var bool */
-    public $peerInitiatedClose = false;
+    public $closedByPeer = false;
 
     /** @var int|null */
     public $closeCode;

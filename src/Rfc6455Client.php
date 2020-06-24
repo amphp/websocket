@@ -226,13 +226,13 @@ final class Rfc6455Client implements Client
         return $this->metadata->closeReason;
     }
 
-    public function didPeerInitiateClose(): bool
+    public function isClosedByPeer(): bool
     {
         if (!$this->metadata->closedAt) {
             throw new \Error('The client has not closed');
         }
 
-        return $this->metadata->peerInitiatedClose;
+        return $this->metadata->closedByPeer;
     }
 
     public function getOptions(): Options
@@ -294,7 +294,7 @@ final class Rfc6455Client implements Client
         }
 
         if (!$this->metadata->closedAt) {
-            $this->metadata->peerInitiatedClose = true;
+            $this->metadata->closedByPeer = true;
             $this->close(Code::ABNORMAL_CLOSE, $message ?? 'TCP connection closed unexpectedly');
         }
     }
@@ -381,7 +381,7 @@ final class Rfc6455Client implements Client
                     break;
                 }
 
-                $this->metadata->peerInitiatedClose = true;
+                $this->metadata->closedByPeer = true;
 
                 $length = \strlen($data);
                 if ($length === 0) {
