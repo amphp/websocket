@@ -4,18 +4,46 @@ namespace Amp\Websocket;
 
 use Amp\ByteStream\InputStream;
 use Amp\ByteStream\Payload;
+use Amp\Promise;
 
 /**
  * This class allows streamed and buffered access to the websocket message by extending Payload.
  */
-final class Message extends Payload
+final class Message implements InputStream
 {
+    /** @var Payload */
+    private $stream;
+
     /** @var bool */
     private $binary;
 
-    public function __construct(InputStream $stream, bool $binary)
+    /**
+     * Create a Message from a UTF-8 text stream.
+     *
+     * @param InputStream $stream UTF-8 text stream.
+     *
+     * @return self
+     */
+    public static function fromText(InputStream $stream): self
     {
-        parent::__construct($stream);
+        return new self($stream, false);
+    }
+
+    /**
+     * Create a Message from a binary stream.
+     *
+     * @param InputStream $stream Binary stream.
+     *
+     * @return self
+     */
+    public static function fromBinary(InputStream $stream): self
+    {
+        return new self($stream, true);
+    }
+
+    private function __construct(InputStream $stream, bool $binary)
+    {
+        $this->stream = new Payload($stream);
         $this->binary = $binary;
     }
 
@@ -37,5 +65,15 @@ final class Message extends Payload
     public function isBinary(): bool
     {
         return $this->binary;
+    }
+
+    public function read(): Promise
+    {
+        return $this->stream->read();
+    }
+
+    public function buffer(): Promise
+    {
+        return $this->stream->buffer();
     }
 }

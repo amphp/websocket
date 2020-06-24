@@ -320,7 +320,12 @@ final class Rfc6455Client implements Client
             }
 
             $this->currentMessageEmitter = new Emitter;
-            $message = new Message(new IteratorStream($this->currentMessageEmitter->iterate()), $opcode === Opcode::BIN);
+            $stream = new IteratorStream($this->currentMessageEmitter->iterate());
+            if ($opcode === Opcode::BIN) {
+                $message = Message::fromBinary($stream);
+            } else {
+                $message = Message::fromText($stream);
+            }
 
             if ($this->nextMessageDeferred) {
                 $deferred = $this->nextMessageDeferred;
