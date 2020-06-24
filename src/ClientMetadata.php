@@ -23,23 +23,49 @@ final class ClientMetadata
     /** @var string|null */
     public $closeReason;
 
-    // Timestamps of when the event occurred.
+    /** @var int */
     public $connectedAt = 0;
+
+    /** @var int */
     public $closedAt = 0;
+
+    /** @var int */
     public $lastReadAt = 0;
+
+    /** @var int */
     public $lastSentAt = 0;
+
+    /** @var int */
     public $lastDataReadAt = 0;
+
+    /** @var int */
     public $lastDataSentAt = 0;
+
+    /** @var int */
     public $lastHeartbeatAt = 0;
 
-    // Simple counters.
+    /** @var int */
     public $bytesRead = 0;
+
+    /** @var int */
     public $bytesSent = 0;
+
+    /** @var int */
     public $framesRead = 0;
+
+    /** @var int */
     public $framesSent = 0;
+
+    /** @var int */
     public $messagesRead = 0;
+
+    /** @var int */
     public $messagesSent = 0;
+
+    /** @var int */
     public $pingCount = 0;
+
+    /** @var int */
     public $pongCount = 0;
 
     /** @var bool */

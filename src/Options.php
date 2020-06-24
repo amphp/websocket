@@ -4,18 +4,43 @@ namespace Amp\Websocket;
 
 final class Options
 {
+    /** @var int */
     private $streamThreshold = 32768; // 32KB
+
+    /** @var int */
     private $frameSplitThreshold = 32768; // 32KB
+
+    /** @var int */
     private $bytesPerSecondLimit = 1048576; // 1MB
+
+    /** @var int */
     private $framesPerSecondLimit = 100;
+
+    /** @var int */
     private $frameSizeLimit = 2097152; // 2MB
+
+    /** @var int */
     private $messageSizeLimit = 10485760; // 10MB
+
+    /** @var bool */
     private $textOnly = false;
+
+    /** @var bool */
     private $validateUtf8 = true;
+
+    /** @var int */
     private $closePeriod = 3;
+
+    /** @var bool */
     private $compressionEnabled = false;
+
+    /** @var bool */
     private $heartbeatEnabled = true;
+
+    /** @var int */
     private $heartbeatPeriod = 10;
+
+    /** @var int */
     private $queuedPingLimit = 3;
 
     /**

@@ -134,9 +134,9 @@ final class Rfc7692Compression implements CompressionContext
     private $deflate;
     /** @var resource */
     private $inflate;
-    /** @var bool */
+    /** @var int */
     private $sendingFlushMode;
-    /** @var bool */
+    /** @var int */
     private $receivingFlushMode;
 
     private function __construct(

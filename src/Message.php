@@ -7,7 +7,7 @@ use Amp\ByteStream\Payload;
 use Amp\Promise;
 
 /**
- * This class allows streamed and buffered access to the websocket message by extending Payload.
+ * This class allows streamed and buffered access to the websocket message.
  */
 final class Message implements InputStream
 {
