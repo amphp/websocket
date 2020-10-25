@@ -12,11 +12,11 @@ interface Client
     /**
      * Receive a message from the remote Websocket endpoint.
      *
-     * @return Promise<Message|null> Resolves to message sent by the remote.
+     * @return Message|null Returns message sent by the remote or null if the connection closes normally.
      *
-     * @throws ClosedException Thrown if the connection is closed.
+     * @throws ClosedException Thrown if the connection is closed abnormally.
      */
-    public function receive(): Promise;
+    public function receive(): ?Message;
 
     /**
      * @return int Unique identifier for the client.
@@ -119,10 +119,8 @@ interface Client
 
     /**
      * Sends a ping to the endpoint.
-     *
-     * @return Promise<int> Resolves with the number of bytes sent to the other endpoint.
      */
-    public function ping(): Promise;
+    public function ping(): void;
 
     /**
      * @return Options The options object associated with this client.
@@ -142,10 +140,10 @@ interface Client
      * @param int    $code
      * @param string $reason
      *
-     * @return Promise<array> Resolves with an array containing the close code at key 0 and the close reason at key 1.
-     *                        These may differ from those provided if the connection was closed prior.
+     * @return array Returns an array containing the close code at key 0 and the close reason at key 1.
+     *               These may differ from those provided if the connection was closed prior.
      */
-    public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): Promise;
+    public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): array;
 
     /**
      * Attaches a callback invoked when the client closes. The callback is passed this object as the first parameter,

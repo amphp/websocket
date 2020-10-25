@@ -132,12 +132,13 @@ final class Rfc7692Compression implements CompressionContext
 
     /** @var resource */
     private $deflate;
+
     /** @var resource */
     private $inflate;
-    /** @var int */
-    private $sendingFlushMode;
-    /** @var int */
-    private $receivingFlushMode;
+
+    private int $sendingFlushMode;
+
+    private int $receivingFlushMode;
 
     private function __construct(
         int $receivingWindowSize,

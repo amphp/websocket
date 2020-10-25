@@ -2,16 +2,14 @@
 
 namespace Amp\Websocket\Test;
 
-use Amp\Delayed;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket\Socket;
-use Amp\Success;
 use Amp\Websocket\ClosedException;
 use Amp\Websocket\Code;
-use Amp\Websocket\Message;
 use Amp\Websocket\Opcode;
 use Amp\Websocket\Options;
 use Amp\Websocket\Rfc6455Client;
+use function Amp\delay;
 
 class ParserTest extends AsyncTestCase
 {
@@ -24,21 +22,28 @@ class ParserTest extends AsyncTestCase
         bool $isBinary,
         ?string $reason = null,
         ?int $code = null
-    ): \Generator {
+    ): void {
+        $this->ignoreLoopWatchers();
+
         $socket = $this->createMock(Socket::class);
         $socket->method('read')
-            ->willReturnOnConsecutiveCalls(new Success($chunk), new Delayed(1, null));
-        $socket->method('write')
-            ->willReturnCallback(function (string $data) {
-                return new Success(\strlen($data));
+            ->willReturnCallback(function () use ($chunk): ?string {
+                static $initial = true;
+
+                if ($initial) {
+                    $initial = false;
+                    return $chunk;
+                }
+
+                delay(5);
+                return null;
             });
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
         try {
-            while ($message = yield $client->receive()) {
-                \assert($message instanceof Message);
-                $this->assertSame($data, yield $message->buffer());
+            while ($message = $client->receive()) {
+                $this->assertSame($data, $message->buffer());
                 $this->assertSame(!$isBinary, $message->isText());
                 $this->assertSame($isBinary, $message->isBinary());
                 $client->close();

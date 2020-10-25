@@ -3,12 +3,11 @@
 namespace Amp\Websocket;
 
 use Amp\ByteStream\InputStream;
-use Amp\ByteStream\IteratorStream;
+use Amp\ByteStream\PipelineStream;
 use Amp\ByteStream\StreamException;
-use Amp\Coroutine;
 use Amp\Deferred;
-use Amp\Emitter;
 use Amp\Loop;
+use Amp\PipelineSource;
 use Amp\Promise;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
@@ -16,70 +15,61 @@ use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 use Amp\Success;
 use cash\LRUCache;
-use function Amp\call;
+use function Amp\async;
+use function Amp\asyncCallable;
+use function Amp\await;
+use function Amp\defer;
 use function Amp\getCurrentTime;
 
 final class Rfc6455Client implements Client
 {
     /** @var self[] */
-    private static $clients = [];
+    private static array $clients = [];
 
     /** @var int[] */
-    private static $bytesReadInLastSecond = [];
+    private static array $bytesReadInLastSecond = [];
 
     /** @var int[] */
-    private static $framesReadInLastSecond = [];
+    private static array $framesReadInLastSecond = [];
 
     /** @var Deferred[] */
-    private static $rateDeferreds = [];
+    private static array $rateDeferreds = [];
 
-    /** @var string|null */
-    private static $watcher;
+    private static string $watcher;
 
     /** @var LRUCache&\IteratorAggregate Least-recently-used cache of next ping (heartbeat) times. */
-    private static $heartbeatTimeouts;
+    private static LRUCache $heartbeatTimeouts;
 
     /** @var int Cached current time. */
-    private static $now;
+    private static int $now;
 
-    /** @var Options */
-    private $options;
+    private Options $options;
 
-    /** @var Socket */
-    private $socket;
+    private Socket $socket;
 
-    /** @var Promise|null */
-    private $lastWrite;
+    private Promise $lastWrite;
 
-    /** @var Promise|null */
-    private $lastEmit;
+    private ?Promise $lastEmit = null;
 
-    /** @var string */
-    private $emitBuffer = '';
+    private string $emitBuffer = '';
 
-    /** @var bool */
-    private $masked;
+    private bool $masked;
 
-    /** @var CompressionContext|null */
-    private $compressionContext;
+    private ?CompressionContext $compressionContext;
 
-    /** @var Emitter|null */
-    private $currentMessageEmitter;
+    private ?PipelineSource $currentMessageEmitter = null;
 
-    /** @var Deferred|null */
-    private $nextMessageDeferred;
+    private ?Deferred $nextMessageDeferred = null;
 
     /** @var Message[] */
-    private $messages = [];
+    private array $messages = [];
 
     /** @var callable[]|null */
-    private $onClose = [];
+    private ?array $onClose = [];
 
-    /** @var ClientMetadata */
-    private $metadata;
+    private ClientMetadata $metadata;
 
-    /** @var Deferred|null */
-    private $closeDeferred;
+    private ?Deferred $closeDeferred;
 
     /**
      * @param Socket                  $socket
@@ -98,8 +88,9 @@ final class Rfc6455Client implements Client
         $this->masked = $masked;
         $this->compressionContext = $compression;
         $this->closeDeferred = new Deferred;
+        $this->lastWrite = new Success;
 
-        if (self::$watcher === null) {
+        if (empty(self::$clients)) {
             self::$now = getCurrentTime();
             self::$heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
                 public function getIterator(): \Iterator
@@ -108,14 +99,13 @@ final class Rfc6455Client implements Client
                 }
             };
 
-            self::$watcher = Loop::repeat(1000, static function (): void {
+            self::$watcher = Loop::repeat(1000, asyncCallable(static function (): void {
                 self::$now = getCurrentTime();
 
                 self::$bytesReadInLastSecond = [];
                 self::$framesReadInLastSecond = [];
 
                 if (!empty(self::$rateDeferreds)) {
-                    /** @psalm-suppress PossiblyNullArgument */
                     Loop::unreference(self::$watcher);
 
                     $rateDeferreds = self::$rateDeferreds;
@@ -141,7 +131,7 @@ final class Rfc6455Client implements Client
 
                     $client->ping();
                 }
-            });
+            }));
             Loop::unreference(self::$watcher);
         }
 
@@ -152,10 +142,10 @@ final class Rfc6455Client implements Client
             self::$heartbeatTimeouts->put($this->metadata->id, self::$now + $this->options->getHeartbeatPeriod());
         }
 
-        Promise\rethrow(new Coroutine($this->read()));
+        defer(fn() => $this->read());
     }
 
-    public function receive(): Promise
+    public function receive(): ?Message
     {
         if ($this->nextMessageDeferred) {
             throw new \Error('Await the previous promise returned from receive() before calling receive() again.');
@@ -166,16 +156,16 @@ final class Rfc6455Client implements Client
             $message = \reset($this->messages);
             unset($this->messages[\key($this->messages)]);
 
-            return new Success($message);
+            return $message;
         }
 
         if ($this->metadata->closedAt) {
-            return new Success;
+            return null;
         }
 
         $this->nextMessageDeferred = new Deferred;
 
-        return $this->nextMessageDeferred->promise();
+        return await($this->nextMessageDeferred->promise());
     }
 
     public function getId(): int
@@ -245,7 +235,7 @@ final class Rfc6455Client implements Client
         return clone $this->metadata;
     }
 
-    private function read(): \Generator
+    private function read(): void
     {
         $maxFramesPerSecond = $this->options->getFramesPerSecondLimit();
         $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
@@ -255,7 +245,7 @@ final class Rfc6455Client implements Client
         $parser = $this->parser();
 
         try {
-            while (($chunk = yield $this->socket->read()) !== null) {
+            while (($chunk = $this->socket->read()) !== null) {
                 if ($chunk === '') {
                     continue;
                 }
@@ -274,14 +264,13 @@ final class Rfc6455Client implements Client
 
                 if ((self::$framesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxFramesPerSecond
                     || self::$bytesReadInLastSecond[$this->metadata->id] >= $maxBytesPerSecond) {
-                    /** @psalm-suppress PossiblyNullArgument */
                     Loop::reference(self::$watcher); // Reference watcher to keep loop running until rate limit released.
                     self::$rateDeferreds[$this->metadata->id] = $deferred = new Deferred;
-                    yield $deferred->promise();
+                    await($deferred->promise());
                 }
 
                 if ($this->lastEmit && !$this->metadata->closedAt) {
-                    yield $this->lastEmit;
+                    await($this->lastEmit);
                 }
             }
         } catch (\Throwable $exception) {
@@ -320,8 +309,8 @@ final class Rfc6455Client implements Client
                 return;
             }
 
-            $this->currentMessageEmitter = new Emitter;
-            $stream = new IteratorStream($this->currentMessageEmitter->iterate());
+            $this->currentMessageEmitter = new PipelineSource;
+            $stream = new PipelineStream($this->currentMessageEmitter->pipe());
             if ($opcode === Opcode::BIN) {
                 $message = Message::fromBinary($stream);
             } else {
@@ -440,36 +429,38 @@ final class Rfc6455Client implements Client
     public function send(string $data): Promise
     {
         \assert((bool) \preg_match('//u', $data), 'Text data must be UTF-8');
-        return $this->lastWrite = new Coroutine($this->sendData($data, Opcode::TEXT));
+        $lastWrite = $this->lastWrite;
+        return $this->lastWrite = async(fn() => $this->sendData($lastWrite, $data, Opcode::TEXT));
     }
 
     public function sendBinary(string $data): Promise
     {
-        return $this->lastWrite = new Coroutine($this->sendData($data, Opcode::BIN));
+        $lastWrite = $this->lastWrite;
+        return $this->lastWrite = async(fn() => $this->sendData($lastWrite, $data, Opcode::BIN));
     }
 
     public function stream(InputStream $stream): Promise
     {
-        return $this->lastWrite = new Coroutine($this->sendStream($stream, Opcode::TEXT));
+        $lastWrite = $this->lastWrite;
+        return $this->lastWrite = async(fn() => $this->sendStream($lastWrite, $stream, Opcode::TEXT));
     }
 
     public function streamBinary(InputStream $stream): Promise
     {
-        return $this->lastWrite = new Coroutine($this->sendStream($stream, Opcode::BIN));
+        $lastWrite = $this->lastWrite;
+        return $this->lastWrite = async(fn() => $this->sendStream($lastWrite, $stream, Opcode::BIN));
     }
 
-    public function ping(): Promise
+    public function ping(): void
     {
         $this->metadata->lastHeartbeatAt = self::$now;
         ++$this->metadata->pingCount;
-        return $this->write((string) $this->metadata->pingCount, Opcode::PING);
+        $this->write((string) $this->metadata->pingCount, Opcode::PING);
     }
 
-    private function sendData(string $data, int $opcode): \Generator
+    private function sendData(Promise $lastWrite, string $data, int $opcode): void
     {
-        if ($this->lastWrite) {
-            yield $this->lastWrite;
-        }
+        await($lastWrite);
 
         ++$this->metadata->messagesSent;
         $this->metadata->lastDataSentAt = self::$now;
@@ -500,7 +491,7 @@ final class Rfc6455Client implements Client
                         $chunk = $this->compressionContext->compress($chunk, false);
                     }
 
-                    yield $this->write($chunk, $opcode, $rsv, false);
+                    $this->write($chunk, $opcode, $rsv, false);
                     $opcode = Opcode::CONT;
                     $rsv = 0; // RSV must be 0 in continuation frames.
                 }
@@ -511,20 +502,18 @@ final class Rfc6455Client implements Client
                 $data = $this->compressionContext->compress($data, true);
             }
 
-            yield $this->write($data, $opcode, $rsv, true);
+            $this->write($data, $opcode, $rsv, true);
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
-            yield $this->close($code, $reason);
+            $this->close($code, $reason);
             throw new ClosedException('Client unexpectedly closed', $code, $reason);
         }
     }
 
-    private function sendStream(InputStream $stream, int $opcode): \Generator
+    private function sendStream(Promise $lastWrite, InputStream $stream, int $opcode): void
     {
-        if ($this->lastWrite) {
-            yield $this->lastWrite;
-        }
+        await($lastWrite);
 
         $rsv = 0;
         $compress = false;
@@ -535,15 +524,16 @@ final class Rfc6455Client implements Client
         }
 
         try {
-            $buffer = yield $stream->read();
+            $buffer = $stream->read();
 
             if ($buffer === null) {
-                return yield $this->write('', $opcode, 0, true);
+                $this->write('', $opcode, 0, true);
+                return;
             }
 
             $streamThreshold = $this->options->getStreamThreshold();
 
-            while (($chunk = yield $stream->read()) !== null) {
+            while (($chunk = $stream->read()) !== null) {
                 if ($chunk === '') {
                     continue;
                 }
@@ -558,7 +548,7 @@ final class Rfc6455Client implements Client
                     $buffer = $this->compressionContext->compress($buffer, false);
                 }
 
-                yield $this->write($buffer, $opcode, $rsv, false);
+                $this->write($buffer, $opcode, $rsv, false);
                 $opcode = Opcode::CONT;
                 $rsv = 0; // RSV must be 0 in continuation frames.
 
@@ -570,22 +560,22 @@ final class Rfc6455Client implements Client
                 $buffer = $this->compressionContext->compress($buffer, true);
             }
 
-            yield $this->write($buffer, $opcode, $rsv, true);
+            $this->write($buffer, $opcode, $rsv, true);
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
-            yield $this->close($code, $reason);
+            $this->close($code, $reason);
             throw new ClosedException('Client unexpectedly closed', $code, $reason);
         } catch (\Throwable $exception) {
-            yield $this->close(Code::UNEXPECTED_SERVER_ERROR, 'Error while reading message data');
+            $this->close(Code::UNEXPECTED_SERVER_ERROR, 'Error while reading message data');
             throw $exception;
         }
     }
 
-    private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): Promise
+    private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): void
     {
         if ($this->metadata->closedAt) {
-            return new Success(0);
+            return;
         }
 
         $frame = $this->compile($data, $opcode, $rsv, $isFinal);
@@ -594,7 +584,7 @@ final class Rfc6455Client implements Client
         $this->metadata->bytesSent += \strlen($frame);
         $this->metadata->lastSentAt = self::$now;
 
-        return $this->socket->write($frame);
+        $this->socket->write($frame);
     }
 
     private function compile(string $data, int $opcode, int $rsv, bool $isFinal): string
@@ -620,92 +610,88 @@ final class Rfc6455Client implements Client
         return $w . $data;
     }
 
-    public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): Promise
+    public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): array
     {
         if ($this->metadata->closedAt) {
-            return new Success([$this->metadata->closeCode, $this->metadata->closeReason]);
+            return [$this->metadata->closeCode, $this->metadata->closeReason];
         }
 
-        return call(function () use ($code, $reason) {
-            try {
-                \assert($code !== Code::NONE || $reason === '');
-                $promise = $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
+        try {
+            \assert($code !== Code::NONE || $reason === '');
+            $promise = async(fn() => $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE));
 
-                $this->metadata->closedAt = self::$now;
-                $this->metadata->closeCode = $code;
-                $this->metadata->closeReason = $reason;
+            $this->metadata->closedAt = self::$now;
+            $this->metadata->closeCode = $code;
+            $this->metadata->closeReason = $reason;
 
-                if ($this->currentMessageEmitter) {
-                    $emitter = $this->currentMessageEmitter;
-                    $this->currentMessageEmitter = null;
-                    $emitter->fail(new ClosedException(
-                        'Connection closed while streaming message body',
-                        $code,
-                        $reason
-                    ));
-                }
-
-                if ($this->nextMessageDeferred) {
-                    $deferred = $this->nextMessageDeferred;
-                    $this->nextMessageDeferred = null;
-
-                    switch ($code) {
-                        case Code::NORMAL_CLOSE:
-                        case Code::NONE:
-                            $deferred->resolve();
-                            break;
-
-                        default:
-                            $deferred->fail(new ClosedException(
-                                'Connection closed abnormally while awaiting message',
-                                $code,
-                                $reason
-                            ));
-                            break;
-                    }
-                }
-
-                yield $promise; // Wait for writing close frame to complete.
-
-                if ($this->closeDeferred !== null) {
-                    // Wait for peer close frame for configured number of seconds.
-                    yield Promise\timeout($this->closeDeferred->promise(), $this->options->getClosePeriod() * 1000);
-                }
-            } catch (\Throwable $exception) {
-                // Failed to write close frame or to receive response frame, but we were disconnecting anyway.
+            if ($this->currentMessageEmitter) {
+                $emitter = $this->currentMessageEmitter;
+                $this->currentMessageEmitter = null;
+                $emitter->fail(new ClosedException(
+                    'Connection closed while streaming message body',
+                    $code,
+                    $reason
+                ));
             }
 
-            $this->socket->close();
-            $this->lastWrite = null;
-            $this->lastEmit = null;
+            if ($this->nextMessageDeferred) {
+                $deferred = $this->nextMessageDeferred;
+                $this->nextMessageDeferred = null;
 
-            $onClose = $this->onClose;
-            $this->onClose = null;
+                switch ($code) {
+                    case Code::NORMAL_CLOSE:
+                    case Code::NONE:
+                        $deferred->resolve();
+                        break;
 
-            if ($onClose !== null) {
-                foreach ($onClose as $callback) {
-                    Promise\rethrow(call($callback, $this, $code, $reason));
+                    default:
+                        $deferred->fail(new ClosedException(
+                            'Connection closed abnormally while awaiting message',
+                            $code,
+                            $reason
+                        ));
+                        break;
                 }
             }
 
-            unset(self::$clients[$this->metadata->id]);
-            self::$heartbeatTimeouts->remove($this->metadata->id);
+            await($promise); // Wait for writing close frame to complete.
 
-            if (empty(self::$clients)) {
-                /** @psalm-suppress PossiblyNullArgument */
-                Loop::cancel(self::$watcher);
-                self::$watcher = null;
-                self::$heartbeatTimeouts = null;
+            if ($this->closeDeferred !== null) {
+                // Wait for peer close frame for configured number of seconds.
+                await(Promise\timeout($this->closeDeferred->promise(), $this->options->getClosePeriod() * 1000));
             }
+        } catch (\Throwable $exception) {
+            // Failed to write close frame or to receive response frame, but we were disconnecting anyway.
+        }
 
-            return [$this->metadata->closeCode, $this->metadata->closeReason];
-        });
+        $this->socket->close();
+        $this->lastWrite = new Success;
+        $this->lastEmit = null;
+
+        $onClose = $this->onClose;
+        $this->onClose = null;
+
+        if ($onClose !== null) {
+            foreach ($onClose as $callback) {
+                defer($callback, $this, $code, $reason);
+            }
+        }
+
+        unset(self::$clients[$this->metadata->id]);
+        self::$heartbeatTimeouts->remove($this->metadata->id);
+
+        if (empty(self::$clients)) {
+            Loop::cancel(self::$watcher);
+            self::$heartbeatTimeouts->clear();
+        }
+
+        return [$this->metadata->closeCode, $this->metadata->closeReason];
     }
 
     public function onClose(callable $callback): void
     {
         if ($this->onClose === null) {
-            Promise\rethrow(call($callback, $this, $this->metadata->closeCode, $this->metadata->closeReason));
+            defer($callback, $this, $this->metadata->closeCode, $this->metadata->closeReason);
             return;
         }
 

@@ -4,18 +4,15 @@ namespace Amp\Websocket;
 
 use Amp\ByteStream\InputStream;
 use Amp\ByteStream\Payload;
-use Amp\Promise;
 
 /**
  * This class allows streamed and buffered access to the websocket message.
  */
 final class Message implements InputStream
 {
-    /** @var Payload */
-    private $stream;
+    private Payload $stream;
 
-    /** @var bool */
-    private $binary;
+    private bool $binary;
 
     /**
      * Create a Message from a UTF-8 text stream.
@@ -67,12 +64,12 @@ final class Message implements InputStream
         return $this->binary;
     }
 
-    public function read(): Promise
+    public function read(): ?string
     {
         return $this->stream->read();
     }
 
-    public function buffer(): Promise
+    public function buffer(): string
     {
         return $this->stream->buffer();
     }

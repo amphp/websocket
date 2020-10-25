@@ -9,67 +9,47 @@ final class ClientMetadata
     use Struct;
 
     /** @var int Next sequential client ID. */
-    private static $nextId = 1;
+    private static int $nextId = 1;
 
-    /** @var int */
-    public $id;
+    public int $id;
 
-    /** @var bool */
-    public $closedByPeer = false;
+    public bool $closedByPeer = false;
 
-    /** @var int|null */
-    public $closeCode;
+    public ?int $closeCode = null;
 
-    /** @var string|null */
-    public $closeReason;
+    public ?string $closeReason = null;
 
-    /** @var int */
-    public $connectedAt = 0;
+    public int $connectedAt;
 
-    /** @var int */
-    public $closedAt = 0;
+    public int $closedAt = 0;
 
-    /** @var int */
-    public $lastReadAt = 0;
+    public int $lastReadAt = 0;
 
-    /** @var int */
-    public $lastSentAt = 0;
+    public int $lastSentAt = 0;
 
-    /** @var int */
-    public $lastDataReadAt = 0;
+    public int $lastDataReadAt = 0;
 
-    /** @var int */
-    public $lastDataSentAt = 0;
+    public int $lastDataSentAt = 0;
 
-    /** @var int */
-    public $lastHeartbeatAt = 0;
+    public int $lastHeartbeatAt = 0;
 
-    /** @var int */
-    public $bytesRead = 0;
+    public int $bytesRead = 0;
 
-    /** @var int */
-    public $bytesSent = 0;
+    public int $bytesSent = 0;
 
-    /** @var int */
-    public $framesRead = 0;
+    public int $framesRead = 0;
 
-    /** @var int */
-    public $framesSent = 0;
+    public int $framesSent = 0;
 
-    /** @var int */
-    public $messagesRead = 0;
+    public int $messagesRead = 0;
 
-    /** @var int */
-    public $messagesSent = 0;
+    public int $messagesSent = 0;
 
-    /** @var int */
-    public $pingCount = 0;
+    public int $pingCount = 0;
 
-    /** @var int */
-    public $pongCount = 0;
+    public int $pongCount = 0;
 
-    /** @var bool */
-    public $compressionEnabled;
+    public bool $compressionEnabled;
 
     /**
      * @param int    $time Current timestamp.

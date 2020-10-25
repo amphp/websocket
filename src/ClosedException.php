@@ -4,8 +4,7 @@ namespace Amp\Websocket;
 
 final class ClosedException extends \Exception
 {
-    /** @var string */
-    private $reason;
+    private string $reason;
 
     public function __construct(string $message, int $code, string $reason)
     {
