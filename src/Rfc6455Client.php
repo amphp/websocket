@@ -612,13 +612,15 @@ final class Rfc6455Client implements Client
 
     public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): array
     {
+        await($this->lastWrite);
+
         if ($this->metadata->closedAt) {
             return [$this->metadata->closeCode, $this->metadata->closeReason];
         }
 
         try {
             \assert($code !== Code::NONE || $reason === '');
-            $promise = async(fn() => $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE));
+            $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
 
             $this->metadata->closedAt = self::$now;
             $this->metadata->closeCode = $code;
@@ -653,8 +655,6 @@ final class Rfc6455Client implements Client
                         break;
                 }
             }
-
-            await($promise); // Wait for writing close frame to complete.
 
             if ($this->closeDeferred !== null) {
                 // Wait for peer close frame for configured number of seconds.

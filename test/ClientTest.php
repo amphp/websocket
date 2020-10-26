@@ -21,14 +21,8 @@ use function Amp\delay;
 
 class ClientTest extends AsyncTestCase
 {
-    public function setUp(): void
-    {
-        parent::setUp();
-        $this->ignoreLoopWatchers();
-    }
-
     /**
-     * @return Socket|MockObject
+     * @return Socket&MockObject
      */
     protected function createSocket(): Socket
     {
@@ -146,9 +140,9 @@ class ClientTest extends AsyncTestCase
     {
         $socket = $this->createSocket();
         $packet = compile(Opcode::PING, false, true, '1');
-        $socket->expects($this->once())
+        $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->with($packet);
+            ->withConsecutive([$packet]);
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
@@ -161,9 +155,9 @@ class ClientTest extends AsyncTestCase
     {
         $socket = $this->createSocket();
         $packet = compile(Opcode::TEXT, false, true, 'data');
-        $socket->expects($this->once())
+        $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->with($packet);
+            ->withConsecutive([$packet]);
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
@@ -176,9 +170,9 @@ class ClientTest extends AsyncTestCase
     {
         $socket = $this->createSocket();
         $packet = compile(Opcode::BIN, false, true, 'data');
-        $socket->expects($this->once())
+        $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->with($packet);
+            ->withConsecutive([$packet]);
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
@@ -191,9 +185,9 @@ class ClientTest extends AsyncTestCase
     {
         $socket = $this->createSocket();
         $packet = compile(Opcode::TEXT, false, true, 'chunk1chunk2chunk3');
-        $socket->expects($this->once())
+        $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->with($packet);
+            ->withConsecutive([$packet]);
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
@@ -218,7 +212,7 @@ class ClientTest extends AsyncTestCase
         ];
 
         $socket = $this->createSocket();
-        $socket->expects($this->exactly(2))
+        $socket->expects($this->atLeast(2))
             ->method('write')
             ->withConsecutive(...\array_map(function (string $packet) {
                 return [$packet];
@@ -236,8 +230,6 @@ class ClientTest extends AsyncTestCase
         $stream = new PipelineStream($emitter->pipe());
 
         await($client->stream($stream));
-
-        $client->close();
     }
 
     public function testMultipleClose(): void
