@@ -906,6 +906,7 @@ final class Rfc6455Client implements Client
             if ($isMasked) {
                 // This is memory hungry but it's ~70x faster than iterating byte-by-byte
                 // over the masked string. Deal with it; manual iteration is untenable.
+                /** @psalm-suppress InvalidOperand String operands expected. */
                 $payload ^= \str_repeat($maskingKey, ($frameLength + 3) >> 2);
             }
 
