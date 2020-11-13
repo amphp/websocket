@@ -122,7 +122,7 @@ final class Rfc6455Client implements Client
                     }
 
                     $client = self::$clients[$clientId];
-                    self::$heartbeatTimeouts->put($clientId, self::$now + $client->options->getHeartbeatPeriod());
+                    self::$heartbeatTimeouts->put($clientId, self::$now + $client->options->getHeartbeatPeriod() * 1000);
 
                     if ($client->getUnansweredPingCount() > $client->options->getQueuedPingLimit()) {
                         $client->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
@@ -139,7 +139,7 @@ final class Rfc6455Client implements Client
         self::$clients[$this->metadata->id] = $this;
 
         if ($this->options->isHeartbeatEnabled()) {
-            self::$heartbeatTimeouts->put($this->metadata->id, self::$now + $this->options->getHeartbeatPeriod());
+            self::$heartbeatTimeouts->put($this->metadata->id, self::$now + $this->options->getHeartbeatPeriod() * 1000);
         }
 
         defer(fn() => $this->read());
@@ -240,7 +240,7 @@ final class Rfc6455Client implements Client
         $maxFramesPerSecond = $this->options->getFramesPerSecondLimit();
         $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
         $heartbeatEnabled = $this->options->isHeartbeatEnabled();
-        $heartbeatPeriod = $this->options->getHeartbeatPeriod();
+        $heartbeatPeriod = $this->options->getHeartbeatPeriod() * 1000;
 
         $parser = $this->parser();
 
@@ -892,6 +892,7 @@ final class Rfc6455Client implements Client
             if ($isMasked) {
                 // This is memory hungry but it's ~70x faster than iterating byte-by-byte
                 // over the masked string. Deal with it; manual iteration is untenable.
+                /** @psalm-suppress InvalidOperand String operands expected. */
                 $payload ^= \str_repeat($maskingKey, ($frameLength + 3) >> 2);
             }
 
