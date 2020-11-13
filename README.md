@@ -1,4 +1,4 @@
-# websocket-client
+# Websocket
 
 [![Build Status](https://img.shields.io/travis/amphp/websocket/master.svg?style=flat-square)](https://travis-ci.org/amphp/websocket)
 [![CoverageStatus](https://img.shields.io/coveralls/amphp/websocket/master.svg?style=flat-square)](https://coveralls.io/github/amphp/websocket?branch=master)
