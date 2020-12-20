@@ -574,10 +574,6 @@ final class Rfc6455Client implements Client
 
     private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): void
     {
-        if ($this->metadata->closedAt) {
-            return;
-        }
-
         $frame = $this->compile($data, $opcode, $rsv, $isFinal);
 
         ++$this->metadata->framesSent;
@@ -612,50 +608,51 @@ final class Rfc6455Client implements Client
 
     public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): array
     {
-        await($this->lastWrite);
-
         if ($this->metadata->closedAt) {
             return [$this->metadata->closeCode, $this->metadata->closeReason];
         }
 
+        \assert($code !== Code::NONE || $reason === '');
+
+        $this->metadata->closedAt = self::$now;
+        $this->metadata->closeCode = $code;
+        $this->metadata->closeReason = $reason;
+
+        await($this->lastWrite);
+
+        async(fn() => $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE));
+
+        if ($this->currentMessageEmitter) {
+            $emitter = $this->currentMessageEmitter;
+            $this->currentMessageEmitter = null;
+            $emitter->fail(new ClosedException(
+                'Connection closed while streaming message body',
+                $code,
+                $reason
+            ));
+        }
+
+        if ($this->nextMessageDeferred) {
+            $deferred = $this->nextMessageDeferred;
+            $this->nextMessageDeferred = null;
+
+            switch ($code) {
+                case Code::NORMAL_CLOSE:
+                case Code::NONE:
+                    $deferred->resolve();
+                    break;
+
+                default:
+                    $deferred->fail(new ClosedException(
+                        'Connection closed abnormally while awaiting message',
+                        $code,
+                        $reason
+                    ));
+                    break;
+            }
+        }
+
         try {
-            \assert($code !== Code::NONE || $reason === '');
-            $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
-
-            $this->metadata->closedAt = self::$now;
-            $this->metadata->closeCode = $code;
-            $this->metadata->closeReason = $reason;
-
-            if ($this->currentMessageEmitter) {
-                $emitter = $this->currentMessageEmitter;
-                $this->currentMessageEmitter = null;
-                $emitter->fail(new ClosedException(
-                    'Connection closed while streaming message body',
-                    $code,
-                    $reason
-                ));
-            }
-
-            if ($this->nextMessageDeferred) {
-                $deferred = $this->nextMessageDeferred;
-                $this->nextMessageDeferred = null;
-
-                switch ($code) {
-                    case Code::NORMAL_CLOSE:
-                    case Code::NONE:
-                        $deferred->resolve();
-                        break;
-
-                    default:
-                        $deferred->fail(new ClosedException(
-                            'Connection closed abnormally while awaiting message',
-                            $code,
-                            $reason
-                        ));
-                        break;
-                }
-            }
-
             if ($this->closeDeferred !== null) {
                 // Wait for peer close frame for configured number of seconds.
                 await(Promise\timeout($this->closeDeferred->promise(), $this->options->getClosePeriod() * 1000));
