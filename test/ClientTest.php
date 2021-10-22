@@ -4,9 +4,9 @@ namespace Amp\Websocket\Test;
 
 use Amp\ByteStream\PipelineStream;
 use Amp\Deferred;
-use Amp\Loop;
+use Amp\Future;
 use Amp\PHPUnit\AsyncTestCase;
-use Amp\PipelineSource;
+use Amp\Pipeline\Subject;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Websocket\ClosedException;
@@ -15,8 +15,8 @@ use Amp\Websocket\Opcode;
 use Amp\Websocket\Options;
 use Amp\Websocket\Rfc6455Client;
 use PHPUnit\Framework\MockObject\MockObject;
-use function Amp\async;
-use function Amp\await;
+use Revolt\EventLoop;
+use function Amp\coroutine;
 use function Amp\delay;
 
 class ClientTest extends AsyncTestCase
@@ -32,6 +32,7 @@ class ClientTest extends AsyncTestCase
     public function testGetId(): void
     {
         $socket = $this->createSocket();
+        $socket->method('write')->willReturn(Future::complete(null));
         $options = Options::createServerDefault();
 
         $client1 = new Rfc6455Client($socket, $options, false);
@@ -52,7 +53,8 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::CLOSE, false, true, \pack('n', $code) . $reason);
         $socket->expects($this->once())
             ->method('write')
-            ->with($packet);
+            ->with($packet)
+            ->willReturn(Future::complete(null));
 
         $socket->expects($this->exactly(2))
             ->method('read')
@@ -61,7 +63,7 @@ class ClientTest extends AsyncTestCase
 
                 if ($initial) {
                     $initial = false;
-                    delay(100);
+                    delay(0.1);
                     return compile(Opcode::CLOSE, true, true, \pack('n', $code) . $reason);
                 }
 
@@ -70,7 +72,7 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        $promise = async(fn() => $client->receive()); // Promise should fail due to abnormal close.
+        $future = coroutine(fn() => $client->receive()); // Promise should fail due to abnormal close.
 
         delay(0);
 
@@ -86,13 +88,13 @@ class ClientTest extends AsyncTestCase
         $this->expectException(ClosedException::class);
         $this->expectExceptionMessage('Connection closed');
 
-        await($promise); // Should throw a ClosedException.
+        $future->await(); // Should throw a ClosedException.
     }
 
     public function testCloseWithoutResponse(): void
     {
-        $this->setMinimumRuntime(1000);
-        $this->setTimeout(1100);
+        $this->setMinimumRuntime(1);
+        $this->setTimeout(1.1);
 
         $code = Code::NORMAL_CLOSE;
         $reason = 'Close reason';
@@ -101,12 +103,13 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::CLOSE, false, true, \pack('n', $code) . $reason);
         $socket->expects($this->once())
             ->method('write')
-            ->with($packet);
+            ->with($packet)
+            ->willReturn(Future::complete(null));
 
         $socket->expects($this->once())
             ->method('read')
             ->willReturnCallback(function (): ?string {
-                delay(1200);
+                delay(1.2);
                 return null;
             });
 
@@ -117,7 +120,7 @@ class ClientTest extends AsyncTestCase
             $invoked = true;
         });
 
-        $promise = async(fn() => $client->receive()); // Promise should resolve with null on normal close.
+        $future = coroutine(fn() => $client->receive()); // Promise should resolve with null on normal close.
 
         delay(0);
 
@@ -132,7 +135,7 @@ class ClientTest extends AsyncTestCase
 
         $this->assertTrue($invoked);
 
-        $this->assertNull(await($promise));
+        $this->assertNull($future->await());
     }
 
 
@@ -142,7 +145,8 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::PING, false, true, '1');
         $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->withConsecutive([$packet]);
+            ->withConsecutive([$packet])
+            ->willReturn(Future::complete(null));
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
@@ -157,11 +161,12 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::TEXT, false, true, 'data');
         $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->withConsecutive([$packet]);
+            ->withConsecutive([$packet])
+            ->willReturn(Future::complete(null));
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        await($client->send('data'));
+        $client->send('data')->await();
 
         $client->close();
     }
@@ -172,11 +177,12 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::BIN, false, true, 'data');
         $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->withConsecutive([$packet]);
+            ->withConsecutive([$packet])
+            ->willReturn(Future::complete(null));
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        await($client->sendBinary('data'));
+        $client->sendBinary('data')->await();
 
         $client->close();
     }
@@ -187,19 +193,20 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::TEXT, false, true, 'chunk1chunk2chunk3');
         $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->withConsecutive([$packet]);
+            ->withConsecutive([$packet])
+            ->willReturn(Future::complete(null));
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        $emitter = new PipelineSource;
+        $emitter = new Subject();
         $emitter->emit('chunk1');
         $emitter->emit('chunk2');
         $emitter->emit('chunk3');
         $emitter->complete();
 
-        $stream = new PipelineStream($emitter->pipe());
+        $stream = new PipelineStream($emitter->asPipeline());
 
-        await($client->stream($stream));
+        $client->stream($stream)->await();
 
         $client->close();
     }
@@ -216,29 +223,30 @@ class ClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive(...\array_map(function (string $packet) {
                 return [$packet];
-            }, $packets));
+            }, $packets))
+            ->willReturn(Future::complete(null));
 
         $client = new Rfc6455Client($socket, Options::createServerDefault()->withStreamThreshold(10), false);
 
-        $emitter = new PipelineSource;
+        $emitter = new Subject;
         $emitter->emit('chunk1');
         $emitter->emit('chunk2');
         $emitter->emit('chunk');
         $emitter->emit('3');
         $emitter->complete();
 
-        $stream = new PipelineStream($emitter->pipe());
+        $stream = new PipelineStream($emitter->asPipeline());
 
-        await($client->stream($stream));
+        $client->stream($stream)->await();
     }
 
     public function testMultipleClose(): void
     {
-        $this->setMinimumRuntime(1000);
-        $this->setTimeout(1100);
+        $this->setMinimumRuntime(1);
+        $this->setTimeout(1.1);
 
         // Dummy watcher to keep loop running while waiting on timeout in Rfc6455Client::close().
-        $watcher = Loop::delay(2000, function (): void {
+        $watcher = EventLoop::delay(2, function (): void {
             $this->fail('Dummy watcher should not be invoked');
         });
 
@@ -247,28 +255,29 @@ class ClientTest extends AsyncTestCase
         $deferred = new Deferred;
 
         $socket->method('read')
-            ->willReturnCallback(fn() => await($deferred->promise()));
+            ->willReturnCallback(fn() => $deferred->getFuture()->await());
 
         $socket->expects($this->once())
-            ->method('write');
+            ->method('write')
+            ->willReturn(Future::complete(null));
 
         $socket->expects($this->once())
             ->method('close')
             ->willReturnCallback(function () use ($deferred): void {
-                $deferred->resolve();
+                $deferred->complete(null);
             });
 
         $client = new Rfc6455Client($socket, Options::createServerDefault()->withClosePeriod(1), false);
 
         $client->onClose($this->createCallback(1));
 
-        $promise1 = async(fn() => $client->close(Code::NORMAL_CLOSE, 'First close'));
-        $promise2 = async(fn() => $client->close(Code::ABNORMAL_CLOSE, 'Second close'));
+        $future1 = coroutine(fn() => $client->close(Code::NORMAL_CLOSE, 'First close'));
+        $future2 = coroutine(fn() => $client->close(Code::ABNORMAL_CLOSE, 'Second close'));
 
         try {
-            [[$code1, $reason1], [$code2, $reason2]] = await([$promise1, $promise2]);
+            [[$code1, $reason1], [$code2, $reason2]] = Future\all([$future1, $future2]);
         } finally {
-            Loop::cancel($watcher);
+            EventLoop::cancel($watcher);
         }
 
         // First close code should be used, second is ignored.

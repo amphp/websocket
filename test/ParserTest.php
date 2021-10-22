@@ -2,6 +2,7 @@
 
 namespace Amp\Websocket\Test;
 
+use Amp\Future;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket\Socket;
 use Amp\Websocket\ClosedException;
@@ -23,8 +24,6 @@ class ParserTest extends AsyncTestCase
         ?string $reason = null,
         ?int $code = null
     ): void {
-        $this->ignoreLoopWatchers();
-
         $socket = $this->createMock(Socket::class);
         $socket->method('read')
             ->willReturnCallback(function () use ($chunk): ?string {
@@ -35,9 +34,11 @@ class ParserTest extends AsyncTestCase
                     return $chunk;
                 }
 
-                delay(5);
+                delay(0); // Tick event loop before marking as closed.
                 return null;
             });
+        $socket->method('write')
+            ->willReturn(Future::complete(null));
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 

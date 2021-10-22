@@ -3,7 +3,7 @@
 namespace Amp\Websocket;
 
 use Amp\ByteStream\InputStream;
-use Amp\Promise;
+use Amp\Future;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 
@@ -76,22 +76,22 @@ interface Client
      *
      * @param string $data Payload to send.
      *
-     * @return Promise<void> Resolves once the message has been sent to the peer.
+     * @return Future<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function send(string $data): Promise;
+    public function send(string $data): Future;
 
     /**
      * Sends a binary message to the endpoint.
      *
      * @param string $data Payload to send.
      *
-     * @return Promise<void> Resolves once the message has been sent to the peer.
+     * @return Future<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function sendBinary(string $data): Promise;
+    public function sendBinary(string $data): Future;
 
     /**
      * Streams the given UTF-8 text stream to the endpoint. This method should be used only for large payloads such as
@@ -99,11 +99,11 @@ interface Client
      *
      * @param InputStream $stream
      *
-     * @return Promise<void> Resolves once the message has been sent to the peer.
+     * @return Future<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function stream(InputStream $stream): Promise;
+    public function stream(InputStream $stream): Future;
 
     /**
      * Streams the given binary to the endpoint. This method should be used only for large payloads such as
@@ -111,11 +111,11 @@ interface Client
      *
      * @param InputStream $stream
      *
-     * @return Promise<void> Resolves once the message has been sent to the peer.
+     * @return Future<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function streamBinary(InputStream $stream): Promise;
+    public function streamBinary(InputStream $stream): Future;
 
     /**
      * Sends a ping to the endpoint.

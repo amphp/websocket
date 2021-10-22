@@ -2,12 +2,8 @@
 
 namespace Amp\Websocket;
 
-use Amp\Struct;
-
 final class ClientMetadata
 {
-    use Struct;
-
     /** @var int Next sequential client ID. */
     private static int $nextId = 1;
 
@@ -19,7 +15,7 @@ final class ClientMetadata
 
     public ?string $closeReason = null;
 
-    public int $connectedAt;
+    public float $connectedAt;
 
     public int $closedAt = 0;
 
@@ -52,14 +48,16 @@ final class ClientMetadata
     public bool $compressionEnabled;
 
     /**
-     * @param int    $time Current timestamp.
+     * @param float  $connectedAt Current timestamp.
      * @param bool   $compressionEnabled
      */
-    public function __construct(int $time, bool $compressionEnabled)
-    {
+    public function __construct(
+        float $connectedAt,
+        bool $compressionEnabled,
+    ) {
         $this->id = self::$nextId++;
 
-        $this->connectedAt = $time;
+        $this->connectedAt = $connectedAt;
         $this->compressionEnabled = $compressionEnabled;
     }
 }
