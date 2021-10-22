@@ -15,7 +15,7 @@ final class ClientMetadata
 
     public ?string $closeReason = null;
 
-    public float $connectedAt;
+    public int $connectedAt;
 
     public int $closedAt = 0;
 
@@ -48,11 +48,11 @@ final class ClientMetadata
     public bool $compressionEnabled;
 
     /**
-     * @param float  $connectedAt Current timestamp.
-     * @param bool   $compressionEnabled
+     * @param int $connectedAt Current timestamp.
+     * @param bool $compressionEnabled
      */
     public function __construct(
-        float $connectedAt,
+        int $connectedAt,
         bool $compressionEnabled,
     ) {
         $this->id = self::$nextId++;

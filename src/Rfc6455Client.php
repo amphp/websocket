@@ -88,7 +88,7 @@ final class Rfc6455Client implements Client
         $this->lastWrite = Future::complete(null);
 
         if (empty(self::$clients)) {
-            self::$now = now();
+            self::$now = \time();
             self::$heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
                 public function getIterator(): \Iterator
                 {
@@ -97,7 +97,7 @@ final class Rfc6455Client implements Client
             };
 
             self::$watcher = EventLoop::repeat(1, static function (): void {
-                self::$now = now();
+                self::$now = \time();
 
                 self::$bytesReadInLastSecond = [];
                 self::$framesReadInLastSecond = [];
@@ -119,7 +119,7 @@ final class Rfc6455Client implements Client
                     }
 
                     $client = self::$clients[$clientId];
-                    self::$heartbeatTimeouts->put($clientId, self::$now + $client->options->getHeartbeatPeriod() * 1000);
+                    self::$heartbeatTimeouts->put($clientId, self::$now + $client->options->getHeartbeatPeriod());
 
                     if ($client->getUnansweredPingCount() > $client->options->getQueuedPingLimit()) {
                         $client->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
@@ -136,7 +136,7 @@ final class Rfc6455Client implements Client
         self::$clients[$this->metadata->id] = $this;
 
         if ($this->options->isHeartbeatEnabled()) {
-            self::$heartbeatTimeouts->put($this->metadata->id, self::$now + $this->options->getHeartbeatPeriod() * 1000);
+            self::$heartbeatTimeouts->put($this->metadata->id, self::$now + $this->options->getHeartbeatPeriod());
         }
 
         EventLoop::queue(fn() => $this->read());
