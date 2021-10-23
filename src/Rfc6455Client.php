@@ -260,7 +260,7 @@ final class Rfc6455Client implements Client
                 $chunk = ''; // Free memory from last chunk read.
 
                 if ((self::$framesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxFramesPerSecond
-                    || self::$bytesReadInLastSecond[$this->metadata->id] >= $maxBytesPerSecond) {
+                    || (self::$bytesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxBytesPerSecond) {
                     EventLoop::reference(self::$watcher); // Reference watcher to keep loop running until rate limit released.
                     self::$rateDeferreds[$this->metadata->id] = $deferred = new Deferred;
                     $deferred->getFuture()->await();
@@ -488,7 +488,7 @@ final class Rfc6455Client implements Client
                         $chunk = $this->compressionContext->compress($chunk, false);
                     }
 
-                    $this->write($chunk, $opcode, $rsv, false);
+                    $this->write($chunk, $opcode, $rsv, false)->ignore();
                     $opcode = Opcode::CONT;
                     $rsv = 0; // RSV must be 0 in continuation frames.
                 }
@@ -524,7 +524,7 @@ final class Rfc6455Client implements Client
             $buffer = $stream->read();
 
             if ($buffer === null) {
-                $this->write('', $opcode, 0, true);
+                $this->write('', $opcode, 0, true)->ignore();
                 return;
             }
 
@@ -545,7 +545,7 @@ final class Rfc6455Client implements Client
                     $buffer = $this->compressionContext->compress($buffer, false);
                 }
 
-                $this->write($buffer, $opcode, $rsv, false);
+                $this->write($buffer, $opcode, $rsv, false)->ignore();
                 $opcode = Opcode::CONT;
                 $rsv = 0; // RSV must be 0 in continuation frames.
 
@@ -557,7 +557,7 @@ final class Rfc6455Client implements Client
                 $buffer = $this->compressionContext->compress($buffer, true);
             }
 
-            $this->write($buffer, $opcode, $rsv, true);
+            $this->write($buffer, $opcode, $rsv, true)->await();
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
