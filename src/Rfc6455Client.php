@@ -15,8 +15,6 @@ use Amp\Socket\TlsInfo;
 use Amp\TimeoutCancellationToken;
 use cash\LRUCache;
 use Revolt\EventLoop;
-use function Amp\coroutine;
-use function Revolt\now;
 
 final class Rfc6455Client implements Client
 {
@@ -44,7 +42,7 @@ final class Rfc6455Client implements Client
 
     private Socket $socket;
 
-    private Future $lastWrite;
+    private ?Future $lastWrite = null;
 
     private ?Future $lastEmit = null;
 
@@ -85,7 +83,6 @@ final class Rfc6455Client implements Client
         $this->masked = $masked;
         $this->compressionContext = $compression;
         $this->closeDeferred = new Deferred;
-        $this->lastWrite = Future::complete(null);
 
         if (empty(self::$clients)) {
             self::$now = \time();
@@ -266,9 +263,9 @@ final class Rfc6455Client implements Client
                     $deferred->getFuture()->await();
                 }
 
-                if ($this->lastEmit && !$this->metadata->closedAt) {
+                if (!$this->metadata->closedAt) {
                     try {
-                        $this->lastEmit->await();
+                        $this->lastEmit?->await();
                     } catch (\Throwable) {
                         // Ignore if the message was disposed.
                     }
@@ -278,11 +275,8 @@ final class Rfc6455Client implements Client
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
         }
 
-        if ($this->closeDeferred !== null) {
-            $deferred = $this->closeDeferred;
-            $this->closeDeferred = null;
-            $deferred->complete(null);
-        }
+        $this->closeDeferred?->complete(null);
+        $this->closeDeferred = null;
 
         if (!$this->metadata->closedAt) {
             $this->metadata->closedByPeer = true;
@@ -366,11 +360,8 @@ final class Rfc6455Client implements Client
 
         switch ($opcode) {
             case Opcode::CLOSE:
-                if ($this->closeDeferred) {
-                    $deferred = $this->closeDeferred;
-                    $this->closeDeferred = null;
-                    $deferred->complete(null);
-                }
+                $this->closeDeferred?->complete(null);
+                $this->closeDeferred = null;
 
                 if ($this->metadata->closedAt) {
                     break;
@@ -434,26 +425,22 @@ final class Rfc6455Client implements Client
     public function send(string $data): Future
     {
         \assert((bool) \preg_match('//u', $data), 'Text data must be UTF-8');
-        $lastWrite = $this->lastWrite;
-        return $this->lastWrite = coroutine(fn() => $this->sendData($lastWrite, $data, Opcode::TEXT));
+        return $this->pushData($data, Opcode::TEXT);
     }
 
     public function sendBinary(string $data): Future
     {
-        $lastWrite = $this->lastWrite;
-        return $this->lastWrite = coroutine(fn() => $this->sendData($lastWrite, $data, Opcode::BIN));
+        return $this->pushData($data, Opcode::BIN);
     }
 
     public function stream(InputStream $stream): Future
     {
-        $lastWrite = $this->lastWrite;
-        return $this->lastWrite = coroutine(fn() => $this->sendStream($lastWrite, $stream, Opcode::TEXT));
+        return $this->pushStream($stream, Opcode::TEXT);
     }
 
     public function streamBinary(InputStream $stream): Future
     {
-        $lastWrite = $this->lastWrite;
-        return $this->lastWrite = coroutine(fn() => $this->sendStream($lastWrite, $stream, Opcode::BIN));
+        return $this->pushStream($stream, Opcode::BIN);
     }
 
     public function ping(): void
@@ -463,10 +450,18 @@ final class Rfc6455Client implements Client
         $this->write((string) $this->metadata->pingCount, Opcode::PING)->ignore();
     }
 
-    private function sendData(Future $lastWrite, string $data, int $opcode): void
+    private function pushData(string $data, int $opcode): Future
     {
-        $lastWrite->await();
+        if ($this->lastWrite) {
+            // Use a coroutine to send data if an outgoing stream is still pending.
+            return $this->lastWrite->apply(fn () => $this->sendData($data, $opcode)->await());
+        }
 
+        return $this->sendData($data, $opcode);
+    }
+
+    private function sendData(string $data, int $opcode): Future
+    {
         ++$this->metadata->messagesSent;
         $this->metadata->lastDataSentAt = self::$now;
 
@@ -481,45 +476,64 @@ final class Rfc6455Client implements Client
             $compress = true;
         }
 
-        try {
-            if (\strlen($data) > $this->options->getFrameSplitThreshold()) {
-                $length = \strlen($data);
-                $slices = (int) \ceil($length / $this->options->getFrameSplitThreshold());
-                $length = (int) \ceil($length / $slices);
+        if (\strlen($data) > $this->options->getFrameSplitThreshold()) {
+            $length = \strlen($data);
+            $slices = (int) \ceil($length / $this->options->getFrameSplitThreshold());
+            $length = (int) \ceil($length / $slices);
 
-                for ($i = 1; $i < $slices; ++$i) {
-                    $chunk = \substr($data, 0, $length);
-                    $data = (string) \substr($data, $length);
+            for ($i = 1; $i < $slices; ++$i) {
+                $chunk = \substr($data, 0, $length);
+                $data = \substr($data, $length);
 
-                    if ($compress) {
-                        /** @psalm-suppress PossiblyNullReference */
-                        $chunk = $this->compressionContext->compress($chunk, false);
-                    }
-
-                    $this->write($chunk, $opcode, $rsv, false)->ignore();
-                    $opcode = Opcode::CONT;
-                    $rsv = 0; // RSV must be 0 in continuation frames.
+                if ($compress) {
+                    /** @psalm-suppress PossiblyNullReference */
+                    $chunk = $this->compressionContext->compress($chunk, false);
                 }
-            }
 
-            if ($compress) {
-                /** @psalm-suppress PossiblyNullReference */
-                $data = $this->compressionContext->compress($data, true);
+                $this->write($chunk, $opcode, $rsv, false)->ignore();
+                $opcode = Opcode::CONT;
+                $rsv = 0; // RSV must be 0 in continuation frames.
             }
-
-            $this->write($data, $opcode, $rsv, true)->await();
-        } catch (StreamException $exception) {
-            $code = Code::ABNORMAL_CLOSE;
-            $reason = 'Writing to the client failed';
-            $this->close($code, $reason);
-            throw new ClosedException('Client unexpectedly closed', $code, $reason);
         }
+
+        if ($compress) {
+            /** @psalm-suppress PossiblyNullReference */
+            $data = $this->compressionContext->compress($data, true);
+        }
+
+        return $this->write($data, $opcode, $rsv, true)
+            ->catch(function (\Throwable $exception): void {
+                $code = Code::ABNORMAL_CLOSE;
+                $reason = 'Writing to the client failed';
+                $this->close($code, $reason);
+                throw new ClosedException('Client unexpectedly closed', $code, $reason, $exception);
+            });
     }
 
-    private function sendStream(Future $lastWrite, InputStream $stream, int $opcode): void
+    private function pushStream(InputStream $stream, int $opcode): Future
     {
-        $lastWrite->await();
+        if (!$this->lastWrite) {
+            $this->lastWrite = Future::complete(null);
+        }
 
+        // Setting $this->lastWrite will force subsequent sends to queue until this stream has ended.
+        return $this->lastWrite = $thisWrite = $this->lastWrite->apply(
+            function () use (&$thisWrite, $stream, $opcode): void {
+                try {
+                    $this->sendStream($stream, $opcode);
+                } finally {
+                    // Null the reference to this coroutine if no other writes have been made so subsequent
+                    // writes do not have to await a future.
+                    if ($this->lastWrite === $thisWrite) {
+                        $this->lastWrite = null;
+                    }
+                }
+            }
+        );
+    }
+
+    private function sendStream(InputStream $stream, int $opcode): void
+    {
         $rsv = 0;
         $compress = false;
 
@@ -532,7 +546,7 @@ final class Rfc6455Client implements Client
             $buffer = $stream->read();
 
             if ($buffer === null) {
-                $this->write('', $opcode, 0, true)->ignore();
+                $this->write('', $opcode, 0, true)->await();
                 return;
             }
 
@@ -553,7 +567,7 @@ final class Rfc6455Client implements Client
                     $buffer = $this->compressionContext->compress($buffer, false);
                 }
 
-                $this->write($buffer, $opcode, $rsv, false)->ignore();
+                $this->write($buffer, $opcode, $rsv, false)->await();
                 $opcode = Opcode::CONT;
                 $rsv = 0; // RSV must be 0 in continuation frames.
 
@@ -570,7 +584,7 @@ final class Rfc6455Client implements Client
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
             $this->close($code, $reason);
-            throw new ClosedException('Client unexpectedly closed', $code, $reason);
+            throw new ClosedException('Client unexpectedly closed', $code, $reason, $exception);
         } catch (\Throwable $exception) {
             $this->close(Code::UNEXPECTED_SERVER_ERROR, 'Error while reading message data');
             throw $exception;
@@ -624,7 +638,7 @@ final class Rfc6455Client implements Client
         $this->metadata->closeReason = $reason;
 
         try {
-            $this->lastWrite->await();
+            $this->lastWrite?->await();
         } catch (\Throwable) {
             return [$this->metadata->closeCode, $this->metadata->closeReason];
         }
@@ -656,11 +670,9 @@ final class Rfc6455Client implements Client
         }
 
         try {
-            if ($this->closeDeferred !== null) {
-                // Wait for peer close frame for configured number of seconds.
-                $this->closeDeferred->getFuture()
-                    ->await(new TimeoutCancellationToken($this->options->getClosePeriod()));
-            }
+            // Wait for peer close frame for configured number of seconds.
+            $this->closeDeferred?->getFuture()
+                ->await(new TimeoutCancellationToken($this->options->getClosePeriod()));
         } catch (\Throwable $exception) {
             // Failed to write close frame or to receive response frame, but we were disconnecting anyway.
         }
