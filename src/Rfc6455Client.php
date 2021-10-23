@@ -267,7 +267,11 @@ final class Rfc6455Client implements Client
                 }
 
                 if ($this->lastEmit && !$this->metadata->closedAt) {
-                    $this->lastEmit->await();
+                    try {
+                        $this->lastEmit->await();
+                    } catch (\Throwable) {
+                        // Ignore if the message was disposed.
+                    }
                 }
             }
         } catch (\Throwable $exception) {
@@ -332,8 +336,12 @@ final class Rfc6455Client implements Client
         $this->emitBuffer .= $data;
 
         if ($terminated || \strlen($this->emitBuffer) >= $this->options->getStreamThreshold()) {
-            $promise = $this->currentMessageEmitter->emit($this->emitBuffer);
-            $this->lastEmit = $this->nextMessageDeferred ? null : $promise;
+            if ($this->currentMessageEmitter->isDisposed()) {
+                $this->lastEmit = null;
+            } else {
+                $future = $this->currentMessageEmitter->emit($this->emitBuffer);
+                $this->lastEmit = $this->nextMessageDeferred ? null : $future;
+            }
             $this->emitBuffer = '';
         }
 
