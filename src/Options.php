@@ -207,7 +207,7 @@ final class Options
      */
     public function getFramesPerSecondLimit(): int
     {
-        return $this->bytesPerSecondLimit;
+        return $this->framesPerSecondLimit;
     }
 
     /**
