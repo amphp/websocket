@@ -150,6 +150,32 @@ class ClientTest extends AsyncTestCase
         yield $client->send('data');
     }
 
+    public function testSendSplit(): \Generator
+    {
+        $packets = [
+            compile(Opcode::TEXT, false, false, 'chunk1'),
+            compile(Opcode::CONT, false, false, 'chunk2'),
+            compile(Opcode::CONT, false, false, 'chunk3'),
+            compile(Opcode::CONT, false, true, 'end'),
+        ];
+
+        $socket = $this->createSocket();
+        $socket->expects($this->exactly(\count($packets)))
+            ->method('write')
+            ->withConsecutive(...\array_map(function (string $packet) {
+                return [$packet];
+            }, $packets))
+            ->willReturnOnConsecutiveCalls(
+                ...\array_map(function (string $packet): Promise {
+                    return new Success(\strlen($packet));
+                }, $packets)
+            );
+
+        $client = new Rfc6455Client($socket, Options::createServerDefault()->withFrameSplitThreshold(6), false);
+
+        yield $client->send('chunk1chunk2chunk3end');
+    }
+
     public function testSendBinary(): \Generator
     {
         $socket = $this->createSocket();
@@ -194,7 +220,7 @@ class ClientTest extends AsyncTestCase
         ];
 
         $socket = $this->createSocket();
-        $socket->expects($this->exactly(2))
+        $socket->expects($this->exactly(\count($packets)))
             ->method('write')
             ->withConsecutive(...\array_map(function (string $packet) {
                 return [$packet];

@@ -491,9 +491,8 @@ final class Rfc6455Client implements Client
                 $slices = (int) \ceil($length / $this->options->getFrameSplitThreshold());
                 $length = (int) \ceil($length / $slices);
 
-                for ($i = 1; $i < $slices; ++$i) {
-                    $chunk = \substr($data, 0, $length);
-                    $data = (string) \substr($data, $length);
+                for ($i = 0; $i < $slices - 1; ++$i) {
+                    $chunk = \substr($data, $length * $i, $length);
 
                     if ($compress) {
                         /** @psalm-suppress PossiblyNullReference */
@@ -504,6 +503,8 @@ final class Rfc6455Client implements Client
                     $opcode = Opcode::CONT;
                     $rsv = 0; // RSV must be 0 in continuation frames.
                 }
+
+                $data = \substr($data, $length * $i, $length);
             }
 
             if ($compress) {
