@@ -3,10 +3,10 @@
 namespace Amp\Websocket\Test;
 
 use Amp\ByteStream\PipelineStream;
-use Amp\Deferred;
+use Amp\DeferredFuture;
 use Amp\Future;
 use Amp\PHPUnit\AsyncTestCase;
-use Amp\Pipeline\Subject;
+use Amp\Pipeline\Emitter;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Websocket\ClosedException;
@@ -16,7 +16,7 @@ use Amp\Websocket\Options;
 use Amp\Websocket\Rfc6455Client;
 use PHPUnit\Framework\MockObject\MockObject;
 use Revolt\EventLoop;
-use function Amp\coroutine;
+use function Amp\async;
 use function Amp\delay;
 
 class ClientTest extends AsyncTestCase
@@ -72,7 +72,7 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        $future = coroutine(fn() => $client->receive()); // Promise should fail due to abnormal close.
+        $future = async(fn() => $client->receive()); // Promise should fail due to abnormal close.
 
         delay(0);
 
@@ -120,7 +120,7 @@ class ClientTest extends AsyncTestCase
             $invoked = true;
         });
 
-        $future = coroutine(fn() => $client->receive()); // Promise should resolve with null on normal close.
+        $future = async(fn() => $client->receive()); // Promise should resolve with null on normal close.
 
         delay(0);
 
@@ -220,7 +220,7 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        $emitter = new Subject();
+        $emitter = new Emitter();
         $emitter->emit('chunk1');
         $emitter->emit('chunk2');
         $emitter->emit('chunk3');
@@ -250,7 +250,7 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault()->withStreamThreshold(10), false);
 
-        $emitter = new Subject;
+        $emitter = new Emitter;
         $emitter->emit('chunk1');
         $emitter->emit('chunk2');
         $emitter->emit('chunk');
@@ -274,7 +274,7 @@ class ClientTest extends AsyncTestCase
 
         $socket = $this->createSocket();
 
-        $deferred = new Deferred;
+        $deferred = new DeferredFuture;
 
         $socket->method('read')
             ->willReturnCallback(fn() => $deferred->getFuture()->await());
@@ -293,8 +293,8 @@ class ClientTest extends AsyncTestCase
 
         $client->onClose($this->createCallback(1));
 
-        $future1 = coroutine(fn() => $client->close(Code::NORMAL_CLOSE, 'First close'));
-        $future2 = coroutine(fn() => $client->close(Code::ABNORMAL_CLOSE, 'Second close'));
+        $future1 = async(fn() => $client->close(Code::NORMAL_CLOSE, 'First close'));
+        $future2 = async(fn() => $client->close(Code::ABNORMAL_CLOSE, 'Second close'));
 
         try {
             [[$code1, $reason1], [$code2, $reason2]] = Future\all([$future1, $future2]);

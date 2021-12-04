@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-use Amp\ByteStream\InputStream;
+use Amp\ByteStream\ReadableStream;
 use Amp\Future;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
@@ -97,25 +97,25 @@ interface Client
      * Streams the given UTF-8 text stream to the endpoint. This method should be used only for large payloads such as
      * files. Use send() for smaller payloads.
      *
-     * @param InputStream $stream
+     * @param ReadableStream $stream
      *
      * @return Future<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function stream(InputStream $stream): Future;
+    public function stream(ReadableStream $stream): Future;
 
     /**
      * Streams the given binary to the endpoint. This method should be used only for large payloads such as
      * files. Use sendBinary() for smaller payloads.
      *
-     * @param InputStream $stream
+     * @param ReadableStream $stream
      *
      * @return Future<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function streamBinary(InputStream $stream): Future;
+    public function streamBinary(ReadableStream $stream): Future;
 
     /**
      * Sends a ping to the endpoint.

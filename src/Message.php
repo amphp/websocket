@@ -2,13 +2,14 @@
 
 namespace Amp\Websocket;
 
-use Amp\ByteStream\InputStream;
+use Amp\ByteStream\ReadableStream;
 use Amp\ByteStream\Payload;
+use Amp\Cancellation;
 
 /**
  * This class allows streamed and buffered access to the websocket message.
  */
-final class Message implements InputStream
+final class Message implements ReadableStream
 {
     private Payload $stream;
 
@@ -17,11 +18,11 @@ final class Message implements InputStream
     /**
      * Create a Message from a UTF-8 text stream.
      *
-     * @param InputStream $stream UTF-8 text stream.
+     * @param ReadableStream $stream UTF-8 text stream.
      *
      * @return self
      */
-    public static function fromText(InputStream $stream): self
+    public static function fromText(ReadableStream $stream): self
     {
         return new self($stream, false);
     }
@@ -29,16 +30,16 @@ final class Message implements InputStream
     /**
      * Create a Message from a binary stream.
      *
-     * @param InputStream $stream Binary stream.
+     * @param ReadableStream $stream Binary stream.
      *
      * @return self
      */
-    public static function fromBinary(InputStream $stream): self
+    public static function fromBinary(ReadableStream $stream): self
     {
         return new self($stream, true);
     }
 
-    private function __construct(InputStream $stream, bool $binary)
+    private function __construct(ReadableStream $stream, bool $binary)
     {
         $this->stream = new Payload($stream);
         $this->binary = $binary;
@@ -64,13 +65,17 @@ final class Message implements InputStream
         return $this->binary;
     }
 
-    public function read(): ?string
+    public function read(?Cancellation $cancellation = null): ?string
     {
-        return $this->stream->read();
+        return $this->stream->read($cancellation);
     }
 
     public function buffer(): string
     {
         return $this->stream->buffer();
     }
+
+	public function isReadable(): bool {
+		return $this->stream->isReadable();
+	}
 }

@@ -3,12 +3,12 @@
 namespace Amp\Websocket;
 
 use Amp\ByteStream\InMemoryStream;
-use Amp\ByteStream\InputStream;
+use Amp\ByteStream\ReadableStream;
 use Amp\ByteStream\PipelineStream;
 use Amp\ByteStream\StreamException;
-use Amp\Deferred;
+use Amp\DeferredFuture;
 use Amp\Future;
-use Amp\Pipeline\Subject;
+use Amp\Pipeline\Emitter;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Socket\SocketAddress;
@@ -28,7 +28,7 @@ final class Rfc6455Client implements Client
     /** @var int[] */
     private static array $framesReadInLastSecond = [];
 
-    /** @var Deferred[] */
+    /** @var DeferredFuture[] */
     private static array $rateDeferreds = [];
 
     private static string $watcher;
@@ -51,9 +51,9 @@ final class Rfc6455Client implements Client
 
     private ?CompressionContext $compressionContext;
 
-    private ?Subject $currentMessageEmitter = null;
+    private ?Emitter $currentMessageEmitter = null;
 
-    private ?Deferred $nextMessageDeferred = null;
+    private ?DeferredFuture $nextMessageDeferred = null;
 
     /** @var Message[] */
     private array $messages = [];
@@ -63,7 +63,7 @@ final class Rfc6455Client implements Client
 
     private ClientMetadata $metadata;
 
-    private ?Deferred $closeDeferred;
+    private ?DeferredFuture $closeDeferred;
 
     /**
      * @param Socket                  $socket
@@ -81,7 +81,7 @@ final class Rfc6455Client implements Client
         $this->options = $options;
         $this->masked = $masked;
         $this->compressionContext = $compression;
-        $this->closeDeferred = new Deferred;
+        $this->closeDeferred = new DeferredFuture;
 
         if (empty(self::$clients)) {
             self::$now = \time();
@@ -156,7 +156,7 @@ final class Rfc6455Client implements Client
             return null;
         }
 
-        $this->nextMessageDeferred = new Deferred;
+        $this->nextMessageDeferred = new DeferredFuture;
 
         return $this->nextMessageDeferred->getFuture()->await();
     }
@@ -258,7 +258,7 @@ final class Rfc6455Client implements Client
                 if ((self::$framesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxFramesPerSecond
                     || (self::$bytesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxBytesPerSecond) {
                     EventLoop::reference(self::$watcher); // Reference watcher to keep loop running until rate limit released.
-                    self::$rateDeferreds[$this->metadata->id] = $deferred = new Deferred;
+                    self::$rateDeferreds[$this->metadata->id] = $deferred = new DeferredFuture;
                     $deferred->getFuture()->await();
                 }
 
@@ -307,7 +307,7 @@ final class Rfc6455Client implements Client
                 $stream = new InMemoryStream($data);
                 ++$this->metadata->messagesRead;
             } else {
-                $this->currentMessageEmitter = new Subject;
+                $this->currentMessageEmitter = new Emitter;
                 $stream = new PipelineStream($this->currentMessageEmitter->asPipeline());
             }
 
@@ -433,12 +433,12 @@ final class Rfc6455Client implements Client
         return $this->pushData($data, Opcode::BIN);
     }
 
-    public function stream(InputStream $stream): Future
+    public function stream(ReadableStream $stream): Future
     {
         return $this->pushStream($stream, Opcode::TEXT);
     }
 
-    public function streamBinary(InputStream $stream): Future
+    public function streamBinary(ReadableStream $stream): Future
     {
         return $this->pushStream($stream, Opcode::BIN);
     }
@@ -454,7 +454,7 @@ final class Rfc6455Client implements Client
     {
         if ($this->lastWrite) {
             // Use a coroutine to send data if an outgoing stream is still pending.
-            return $this->lastWrite->apply(fn () => $this->sendData($data, $opcode)->await());
+            return $this->lastWrite->map(fn () => $this->sendData($data, $opcode)->await());
         }
 
         return $this->sendData($data, $opcode);
@@ -511,14 +511,14 @@ final class Rfc6455Client implements Client
             });
     }
 
-    private function pushStream(InputStream $stream, int $opcode): Future
+    private function pushStream(ReadableStream $stream, int $opcode): Future
     {
         if (!$this->lastWrite) {
             $this->lastWrite = Future::complete(null);
         }
 
         // Setting $this->lastWrite will force subsequent sends to queue until this stream has ended.
-        return $this->lastWrite = $thisWrite = $this->lastWrite->apply(
+        return $this->lastWrite = $thisWrite = $this->lastWrite->map(
             function () use (&$thisWrite, $stream, $opcode): void {
                 try {
                     $this->sendStream($stream, $opcode);
@@ -533,7 +533,7 @@ final class Rfc6455Client implements Client
         );
     }
 
-    private function sendStream(InputStream $stream, int $opcode): void
+    private function sendStream(ReadableStream $stream, int $opcode): void
     {
         $rsv = 0;
         $compress = false;
