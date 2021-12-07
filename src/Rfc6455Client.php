@@ -502,13 +502,15 @@ final class Rfc6455Client implements Client
             $data = $this->compressionContext->compress($data, true);
         }
 
-        return $this->write($data, $opcode, $rsv, true)
+        $writeFuture = $this->write($data, $opcode, $rsv, true)
             ->catch(function (\Throwable $exception): void {
                 $code = Code::ABNORMAL_CLOSE;
                 $reason = 'Writing to the client failed';
                 $this->close($code, $reason);
                 throw new ClosedException('Client unexpectedly closed', $code, $reason, $exception);
             });
+		$writeFuture->ignore();
+		return $writeFuture;
     }
 
     private function pushStream(ReadableStream $stream, int $opcode): Future
