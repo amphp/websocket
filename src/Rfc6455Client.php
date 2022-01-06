@@ -455,7 +455,8 @@ final class Rfc6455Client implements Client
     {
         if ($this->lastWrite) {
             // Use a coroutine to send data if an outgoing stream is still pending.
-            $this->lastWrite->map(fn () => $this->sendData($data, $opcode));
+            $this->lastWrite->map(fn () => $this->sendData($data, $opcode))->await();
+            return;
         }
 
         $this->sendData($data, $opcode);
