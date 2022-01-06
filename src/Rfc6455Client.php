@@ -16,6 +16,7 @@ use Amp\Socket\TlsInfo;
 use Amp\TimeoutCancellation;
 use cash\LRUCache;
 use Revolt\EventLoop;
+use function Amp\async;
 
 final class Rfc6455Client implements Client
 {
@@ -401,7 +402,7 @@ final class Rfc6455Client implements Client
                 break;
 
             case Opcode::PING:
-                $this->write($data, Opcode::PONG);
+                $this->writeAsync($data, Opcode::PONG)->ignore();
                 break;
 
             case Opcode::PONG:
@@ -447,7 +448,7 @@ final class Rfc6455Client implements Client
     {
         $this->metadata->lastHeartbeatAt = self::$now;
         ++$this->metadata->pingCount;
-        $this->write((string) $this->metadata->pingCount, Opcode::PING);
+        $this->writeAsync((string) $this->metadata->pingCount, Opcode::PING)->ignore();
     }
 
     private function pushData(string $data, int $opcode): void
@@ -489,7 +490,7 @@ final class Rfc6455Client implements Client
                     $chunk = $this->compressionContext->compress($chunk, false);
                 }
 
-                $this->write($chunk, $opcode, $rsv, false);
+                $this->writeAsync($chunk, $opcode, $rsv, false)->ignore();
                 $opcode = Opcode::CONT;
                 $rsv = 0; // RSV must be 0 in continuation frames.
             }
@@ -547,7 +548,7 @@ final class Rfc6455Client implements Client
             $buffer = $stream->read();
 
             if ($buffer === null) {
-                $this->write('', $opcode, 0, true)->await();
+                $this->write('', $opcode, 0, true);
                 return;
             }
 
@@ -603,6 +604,11 @@ final class Rfc6455Client implements Client
         $this->socket->write($frame);
     }
 
+    private function writeAsync(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): Future
+    {
+        return async(fn() => $this->write($data, $opcode, $rsv, $isFinal));
+    }
+
     private function compile(string $data, int $opcode, int $rsv, bool $isFinal): string
     {
         $length = \strlen($data);
@@ -644,7 +650,7 @@ final class Rfc6455Client implements Client
             return [$this->metadata->closeCode, $this->metadata->closeReason];
         }
 
-        $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
+        $this->writeAsync($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
 
         if ($this->currentMessageEmitter) {
             $emitter = $this->currentMessageEmitter;
