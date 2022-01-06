@@ -75,7 +75,18 @@ final class Message implements ReadableStream
         return $this->stream->buffer();
     }
 
-	public function isReadable(): bool {
+	public function isReadable(): bool
+    {
 		return $this->stream->isReadable();
 	}
+
+    public function close(): void
+    {
+        $this->stream->close();
+    }
+
+    public function isClosed(): bool
+    {
+        return $this->stream->isClosed();
+    }
 }

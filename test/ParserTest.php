@@ -37,8 +37,6 @@ class ParserTest extends AsyncTestCase
                 delay(0); // Tick event loop before marking as closed.
                 return null;
             });
-        $socket->method('write')
-            ->willReturn(Future::complete(null));
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 

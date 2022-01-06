@@ -76,22 +76,18 @@ interface Client
      *
      * @param string $data Payload to send.
      *
-     * @return Future<void> Resolves once the message has been sent to the peer.
-     *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function send(string $data): Future;
+    public function send(string $data): void;
 
     /**
      * Sends a binary message to the endpoint.
      *
      * @param string $data Payload to send.
      *
-     * @return Future<void> Resolves once the message has been sent to the peer.
-     *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function sendBinary(string $data): Future;
+    public function sendBinary(string $data): void;
 
     /**
      * Streams the given UTF-8 text stream to the endpoint. This method should be used only for large payloads such as

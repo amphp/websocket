@@ -2,6 +2,7 @@
 
 namespace Amp\Websocket\Test;
 
+use Amp\ByteStream\IterableStream;
 use Amp\ByteStream\PipelineStream;
 use Amp\DeferredFuture;
 use Amp\Future;
@@ -32,7 +33,6 @@ class ClientTest extends AsyncTestCase
     public function testGetId(): void
     {
         $socket = $this->createSocket();
-        $socket->method('write')->willReturn(Future::complete(null));
         $options = Options::createServerDefault();
 
         $client1 = new Rfc6455Client($socket, $options, false);
@@ -53,8 +53,7 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::CLOSE, false, true, \pack('n', $code) . $reason);
         $socket->expects($this->once())
             ->method('write')
-            ->with($packet)
-            ->willReturn(Future::complete(null));
+            ->with($packet);
 
         $socket->expects($this->exactly(2))
             ->method('read')
@@ -103,8 +102,7 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::CLOSE, false, true, \pack('n', $code) . $reason);
         $socket->expects($this->once())
             ->method('write')
-            ->with($packet)
-            ->willReturn(Future::complete(null));
+            ->with($packet);
 
         $socket->expects($this->once())
             ->method('read')
@@ -145,8 +143,7 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::PING, false, true, '1');
         $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->withConsecutive([$packet])
-            ->willReturn(Future::complete(null));
+            ->withConsecutive([$packet]);
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
@@ -161,12 +158,11 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::TEXT, false, true, 'data');
         $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->withConsecutive([$packet])
-            ->willReturn(Future::complete(null));
+            ->withConsecutive([$packet]);
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        $client->send('data')->await();
+        $client->send('data');
 
         $client->close();
     }
@@ -185,8 +181,7 @@ class ClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive(...\array_map(function (string $packet) {
                 return [$packet];
-            }, $packets))
-            ->willReturn(Future::complete(null));
+            }, $packets));
 
         $client = new Rfc6455Client($socket, Options::createServerDefault()->withFrameSplitThreshold(6), false);
 
@@ -199,12 +194,11 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::BIN, false, true, 'data');
         $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->withConsecutive([$packet])
-            ->willReturn(Future::complete(null));
+            ->withConsecutive([$packet]);
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        $client->sendBinary('data')->await();
+        $client->sendBinary('data');
 
         $client->close();
     }
@@ -215,8 +209,7 @@ class ClientTest extends AsyncTestCase
         $packet = compile(Opcode::TEXT, false, true, 'chunk1chunk2chunk3');
         $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->withConsecutive([$packet])
-            ->willReturn(Future::complete(null));
+            ->withConsecutive([$packet]);
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
@@ -226,7 +219,7 @@ class ClientTest extends AsyncTestCase
         $emitter->emit('chunk3');
         $emitter->complete();
 
-        $stream = new PipelineStream($emitter->asPipeline());
+        $stream = new IterableStream($emitter->pipe());
 
         $client->stream($stream)->await();
 
@@ -245,8 +238,7 @@ class ClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive(...\array_map(function (string $packet) {
                 return [$packet];
-            }, $packets))
-            ->willReturn(Future::complete(null));
+            }, $packets));
 
         $client = new Rfc6455Client($socket, Options::createServerDefault()->withStreamThreshold(10), false);
 
@@ -257,7 +249,7 @@ class ClientTest extends AsyncTestCase
         $emitter->emit('3');
         $emitter->complete();
 
-        $stream = new PipelineStream($emitter->asPipeline());
+        $stream = new IterableStream($emitter->pipe());
 
         $client->stream($stream)->await();
     }
@@ -280,8 +272,7 @@ class ClientTest extends AsyncTestCase
             ->willReturnCallback(fn() => $deferred->getFuture()->await());
 
         $socket->expects($this->once())
-            ->method('write')
-            ->willReturn(Future::complete(null));
+            ->method('write');
 
         $socket->expects($this->once())
             ->method('close')
