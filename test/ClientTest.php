@@ -221,7 +221,7 @@ class ClientTest extends AsyncTestCase
 
         $stream = new IterableStream($emitter->pipe());
 
-        $client->stream($stream)->await();
+        $client->stream($stream);
 
         $client->close();
     }
@@ -251,7 +251,7 @@ class ClientTest extends AsyncTestCase
 
         $stream = new IterableStream($emitter->pipe());
 
-        $client->stream($stream)->await();
+        $client->stream($stream);
     }
 
     public function testMultipleClose(): void

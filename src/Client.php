@@ -3,7 +3,6 @@
 namespace Amp\Websocket;
 
 use Amp\ByteStream\ReadableStream;
-use Amp\Future;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 
@@ -95,11 +94,9 @@ interface Client
      *
      * @param ReadableStream $stream
      *
-     * @return Future<void> Resolves once the message has been sent to the peer.
-     *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function stream(ReadableStream $stream): Future;
+    public function stream(ReadableStream $stream): void;
 
     /**
      * Streams the given binary to the endpoint. This method should be used only for large payloads such as
@@ -107,11 +104,9 @@ interface Client
      *
      * @param ReadableStream $stream
      *
-     * @return Future<void> Resolves once the message has been sent to the peer.
-     *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function streamBinary(ReadableStream $stream): Future;
+    public function streamBinary(ReadableStream $stream): void;
 
     /**
      * Sends a ping to the endpoint.

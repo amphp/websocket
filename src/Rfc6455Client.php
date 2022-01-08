@@ -434,14 +434,14 @@ final class Rfc6455Client implements Client
         $this->pushData($data, Opcode::BIN);
     }
 
-    public function stream(ReadableStream $stream): Future
+    public function stream(ReadableStream $stream): void
     {
-        return $this->pushStream($stream, Opcode::TEXT);
+        $this->pushStream($stream, Opcode::TEXT);
     }
 
-    public function streamBinary(ReadableStream $stream): Future
+    public function streamBinary(ReadableStream $stream): void
     {
-        return $this->pushStream($stream, Opcode::BIN);
+        $this->pushStream($stream, Opcode::BIN);
     }
 
     public function ping(): void
@@ -513,14 +513,12 @@ final class Rfc6455Client implements Client
         }
     }
 
-    private function pushStream(ReadableStream $stream, int $opcode): Future
+    private function pushStream(ReadableStream $stream, int $opcode): void
     {
-        if (!$this->lastWrite) {
-            $this->lastWrite = Future::complete();
-        }
+        $this->lastWrite ??= Future::complete();
 
         // Setting $this->lastWrite will force subsequent sends to queue until this stream has ended.
-        return $this->lastWrite = $thisWrite = $this->lastWrite->map(
+        $this->lastWrite = $thisWrite = $this->lastWrite->map(
             function () use (&$thisWrite, $stream, $opcode): void {
                 try {
                     $this->sendStream($stream, $opcode);
@@ -533,6 +531,8 @@ final class Rfc6455Client implements Client
                 }
             }
         );
+
+        $this->lastWrite->await();
     }
 
     private function sendStream(ReadableStream $stream, int $opcode): void
