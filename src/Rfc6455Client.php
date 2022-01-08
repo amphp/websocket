@@ -655,6 +655,7 @@ final class Rfc6455Client implements Client
 
                     switch ($code) {
                         case Code::NORMAL_CLOSE:
+                        case Code::GOING_AWAY:
                         case Code::NONE:
                             $deferred->resolve();
                             break;
