@@ -76,6 +76,8 @@ interface Client
      *
      * @param string $data Payload to send.
      *
+     * @return Future<void> Resolves once the message has been sent to the peer.
+     *
      * @throws ClosedException Thrown if sending to the client fails.
      */
     public function send(string $data): Future;
@@ -84,6 +86,8 @@ interface Client
      * Sends a binary message to the endpoint.
      *
      * @param string $data Payload to send.
+     *
+     * @return Future<void> Resolves once the message has been sent to the peer.
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */

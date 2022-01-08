@@ -162,7 +162,7 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        $client->send('data');
+        $client->send('data')->await();
 
         $client->close();
     }
@@ -198,7 +198,7 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        $client->sendBinary('data');
+        $client->sendBinary('data')->await();
 
         $client->close();
     }
