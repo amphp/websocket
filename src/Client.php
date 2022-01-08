@@ -78,7 +78,7 @@ interface Client
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function send(string $data): void;
+    public function send(string $data): Future;
 
     /**
      * Sends a binary message to the endpoint.
@@ -87,7 +87,7 @@ interface Client
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function sendBinary(string $data): void;
+    public function sendBinary(string $data): Future;
 
     /**
      * Streams the given UTF-8 text stream to the endpoint. This method should be used only for large payloads such as

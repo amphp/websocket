@@ -2,6 +2,7 @@
 
 namespace Amp\Websocket;
 
+use Amp\ByteStream\AsyncWriter;
 use Amp\ByteStream\IterableStream;
 use Amp\ByteStream\ReadableBuffer;
 use Amp\ByteStream\ReadableStream;
@@ -16,7 +17,6 @@ use Amp\Socket\TlsInfo;
 use Amp\TimeoutCancellation;
 use cash\LRUCache;
 use Revolt\EventLoop;
-use function Amp\async;
 
 final class Rfc6455Client implements Client
 {
@@ -43,6 +43,8 @@ final class Rfc6455Client implements Client
     private Options $options;
 
     private Socket $socket;
+
+    private AsyncWriter $writer;
 
     private ?Future $lastWrite = null;
 
@@ -79,6 +81,7 @@ final class Rfc6455Client implements Client
         ?CompressionContext $compression = null
     ) {
         $this->socket = $socket;
+        $this->writer = new AsyncWriter($this->socket);
         $this->options = $options;
         $this->masked = $masked;
         $this->compressionContext = $compression;
@@ -402,7 +405,7 @@ final class Rfc6455Client implements Client
                 break;
 
             case Opcode::PING:
-                $this->writeAsync($data, Opcode::PONG)->ignore();
+                $this->write($data, Opcode::PONG)->ignore();
                 break;
 
             case Opcode::PONG:
@@ -423,15 +426,15 @@ final class Rfc6455Client implements Client
         $this->close($code, $reason);
     }
 
-    public function send(string $data): void
+    public function send(string $data): Future
     {
         \assert((bool) \preg_match('//u', $data), 'Text data must be UTF-8');
-        $this->pushData($data, Opcode::TEXT);
+        return $this->pushData($data, Opcode::TEXT);
     }
 
-    public function sendBinary(string $data): void
+    public function sendBinary(string $data): Future
     {
-        $this->pushData($data, Opcode::BIN);
+        return $this->pushData($data, Opcode::BIN);
     }
 
     public function stream(ReadableStream $stream): Future
@@ -448,21 +451,20 @@ final class Rfc6455Client implements Client
     {
         $this->metadata->lastHeartbeatAt = self::$now;
         ++$this->metadata->pingCount;
-        $this->writeAsync((string) $this->metadata->pingCount, Opcode::PING)->ignore();
+        $this->write((string) $this->metadata->pingCount, Opcode::PING)->ignore();
     }
 
-    private function pushData(string $data, int $opcode): void
+    private function pushData(string $data, int $opcode): Future
     {
         if ($this->lastWrite) {
             // Use a coroutine to send data if an outgoing stream is still pending.
-            $this->lastWrite->map(fn () => $this->sendData($data, $opcode))->await();
-            return;
+            return $this->lastWrite->map(fn () => $this->sendData($data, $opcode))->await();
         }
 
-        $this->sendData($data, $opcode);
+        return $this->sendData($data, $opcode);
     }
 
-    private function sendData(string $data, int $opcode): void
+    private function sendData(string $data, int $opcode): Future
     {
         ++$this->metadata->messagesSent;
         $this->metadata->lastDataSentAt = self::$now;
@@ -491,7 +493,7 @@ final class Rfc6455Client implements Client
                     $chunk = $this->compressionContext->compress($chunk, false);
                 }
 
-                $this->writeAsync($chunk, $opcode, $rsv, false)->ignore();
+                $this->write($chunk, $opcode, $rsv, false)->ignore();
                 $opcode = Opcode::CONT;
                 $rsv = 0; // RSV must be 0 in continuation frames.
             }
@@ -504,7 +506,7 @@ final class Rfc6455Client implements Client
             $data = $this->compressionContext->compress($data, true);
         }
         try {
-            $this->write($data, $opcode, $rsv, true);
+            return $this->write($data, $opcode, $rsv, true);
         } catch(\Throwable $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
@@ -594,7 +596,7 @@ final class Rfc6455Client implements Client
         }
     }
 
-    private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): void
+    private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): Future
     {
         $frame = $this->compile($data, $opcode, $rsv, $isFinal);
 
@@ -602,12 +604,7 @@ final class Rfc6455Client implements Client
         $this->metadata->bytesSent += \strlen($frame);
         $this->metadata->lastSentAt = self::$now;
 
-        $this->socket->write($frame);
-    }
-
-    private function writeAsync(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): Future
-    {
-        return async(fn() => $this->write($data, $opcode, $rsv, $isFinal));
+        return $this->writer->write($frame);
     }
 
     private function compile(string $data, int $opcode, int $rsv, bool $isFinal): string
@@ -651,7 +648,7 @@ final class Rfc6455Client implements Client
             return [$this->metadata->closeCode, $this->metadata->closeReason];
         }
 
-        $this->writeAsync($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
+        $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE)->ignore();
 
         if ($this->currentMessageEmitter) {
             $emitter = $this->currentMessageEmitter;
