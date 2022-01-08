@@ -2,8 +2,10 @@
 
 namespace Amp\Websocket;
 
+use Amp\ByteStream\BufferException;
 use Amp\ByteStream\ReadableStream;
 use Amp\ByteStream\Payload;
+use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
 
 /**
@@ -65,21 +67,37 @@ final class Message implements ReadableStream
         return $this->binary;
     }
 
+    /**
+     * @throws StreamException
+     * @throws ClosedException
+     */
     public function read(?Cancellation $cancellation = null): ?string
     {
         return $this->stream->read($cancellation);
     }
 
-    public function buffer(): string
+    /**
+     * Buffer the entire message contents. Note that the given size limit may not be reached if a smaller message size
+     * limit has been imposed by {@see Options::getMessageSizeLimit()}.
+     *
+     * @see Payload::buffer()
+     *
+     * @throws BufferException|StreamException
+     * @throws ClosedException
+     */
+    public function buffer(?Cancellation $cancellation = null, int $limit = \PHP_INT_MAX): string
     {
-        return $this->stream->buffer();
+        return $this->stream->buffer($cancellation, $limit);
     }
 
-	public function isReadable(): bool
+    public function isReadable(): bool
     {
-		return $this->stream->isReadable();
-	}
+        return $this->stream->isReadable();
+    }
 
+    /**
+     * Indicates the remainder of the message is no longer needed and will be discarded.
+     */
     public function close(): void
     {
         $this->stream->close();
