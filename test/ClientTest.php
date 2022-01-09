@@ -3,7 +3,6 @@
 namespace Amp\Websocket\Test;
 
 use Amp\ByteStream\IterableStream;
-use Amp\ByteStream\PipelineStream;
 use Amp\DeferredFuture;
 use Amp\Future;
 use Amp\PHPUnit\AsyncTestCase;

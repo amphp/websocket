@@ -16,7 +16,6 @@ use Amp\Socket\TlsInfo;
 use Amp\TimeoutCancellation;
 use cash\LRUCache;
 use Revolt\EventLoop;
-use function Amp\async;
 
 final class Rfc6455Client implements Client
 {
@@ -453,12 +452,13 @@ final class Rfc6455Client implements Client
 
     private function pushData(string $data, int $opcode): void
     {
-        if ($this->lastWrite) {
-            // Use a coroutine to send data if an outgoing stream is still pending.
-            $this->lastWrite->map(fn () => $this->sendData($data, $opcode))->await();
+        if ($this->lastWrite || \strlen($data) > $this->options->getFrameSplitThreshold()) {
+            // Treat as a stream if another stream is pending or if splitting the data into multiple frames.
+            $this->pushStream(new ReadableBuffer($data), $opcode);
             return;
         }
 
+        // The majority of messages can be sent with a single frame.
         $this->sendData($data, $opcode);
     }
 
@@ -468,41 +468,15 @@ final class Rfc6455Client implements Client
         $this->metadata->lastDataSentAt = self::$now;
 
         $rsv = 0;
-        $compress = false;
 
         if ($this->compressionContext
             && $opcode === Opcode::TEXT
             && \strlen($data) > $this->compressionContext->getCompressionThreshold()
         ) {
             $rsv |= $this->compressionContext->getRsv();
-            $compress = true;
-        }
-
-        if (\strlen($data) > $this->options->getFrameSplitThreshold()) {
-            $length = \strlen($data);
-            $slices = (int) \ceil($length / $this->options->getFrameSplitThreshold());
-            $length = (int) \ceil($length / $slices);
-
-            for ($i = 0; $i < $slices - 1; ++$i) {
-                $chunk = \substr($data, $length * $i, $length);
-
-                if ($compress) {
-                    /** @psalm-suppress PossiblyNullReference */
-                    $chunk = $this->compressionContext->compress($chunk, false);
-                }
-
-                $this->write($chunk, $opcode, $rsv, false);
-                $opcode = Opcode::CONT;
-                $rsv = 0; // RSV must be 0 in continuation frames.
-            }
-
-            $data = \substr($data, $length * $i, $length);
-        }
-
-        if ($compress) {
-            /** @psalm-suppress PossiblyNullReference */
             $data = $this->compressionContext->compress($data, true);
         }
+
         try {
             $this->write($data, $opcode, $rsv, true);
         } catch(\Throwable $exception) {
@@ -537,6 +511,9 @@ final class Rfc6455Client implements Client
 
     private function sendStream(ReadableStream $stream, int $opcode): void
     {
+        ++$this->metadata->messagesSent;
+        $this->metadata->lastDataSentAt = self::$now;
+
         $rsv = 0;
         $compress = false;
 
@@ -546,43 +523,65 @@ final class Rfc6455Client implements Client
         }
 
         try {
-            $buffer = $stream->read();
+            $chunk = $stream->read();
 
-            if ($buffer === null) {
+            if ($chunk === null) {
                 $this->write('', $opcode, 0, true);
                 return;
             }
 
+            $chunks = [$chunk];
+            $bufferedLength = \strlen($chunk);
             $streamThreshold = $this->options->getStreamThreshold();
+            $splitThreshold = $this->options->getFrameSplitThreshold();
 
-            while (($chunk = $stream->read()) !== null) {
-                if ($chunk === '') {
-                    continue;
-                }
+            do {
+                do {
+                    // Perform another read to avoid sending an empty frame on stream end.
+                    $chunk = $stream->read();
 
-                if (\strlen($buffer) < $streamThreshold) {
-                    $buffer .= $chunk;
-                    continue;
+                    if ($chunk === null || $bufferedLength >= $streamThreshold) {
+                        break;
+                    }
+
+                    $chunks[] = $chunk;
+                    $bufferedLength += \strlen($chunk);
+                } while (true);
+
+                $buffer = \count($chunks) === 1 ? $chunks[0] : \implode($chunks);
+                $chunks = [$chunk];
+
+                if ($bufferedLength > $splitThreshold) {
+                    $splitLength = $bufferedLength;
+                    $slices = (int) \ceil($splitLength / $splitThreshold);
+                    $splitLength = (int) \ceil($splitLength / $slices);
+
+                    for ($i = 0; $i < $slices - 1; ++$i) {
+                        $split = \substr($buffer, $splitLength * $i, $splitLength);
+
+                        if ($compress) {
+                            /** @psalm-suppress PossiblyNullReference */
+                            $split = $this->compressionContext->compress($chunk, false);
+                        }
+
+                        $this->write($split, $opcode, $rsv, false);
+                        $opcode = Opcode::CONT;
+                        $rsv = 0; // RSV must be 0 in continuation frames.
+                    }
+
+                    $buffer = \substr($buffer, $splitLength * $i, $splitLength);
                 }
 
                 if ($compress) {
                     /** @psalm-suppress PossiblyNullReference */
-                    $buffer = $this->compressionContext->compress($buffer, false);
+                    $buffer = $this->compressionContext->compress($buffer, $chunk === null);
                 }
 
-                $this->write($buffer, $opcode, $rsv, false);
+                $this->write($buffer, $opcode, $rsv, $chunk === null);
                 $opcode = Opcode::CONT;
                 $rsv = 0; // RSV must be 0 in continuation frames.
-
-                $buffer = $chunk;
-            }
-
-            if ($compress) {
-                /** @psalm-suppress PossiblyNullReference */
-                $buffer = $this->compressionContext->compress($buffer, true);
-            }
-
-            $this->write($buffer, $opcode, $rsv, true);
+                $bufferedLength = 0;
+            } while ($chunk !== null);
         } catch (StreamException $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';

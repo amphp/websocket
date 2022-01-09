@@ -4,7 +4,7 @@ namespace Amp\Websocket;
 
 final class Options
 {
-    private int $streamThreshold = 32768; // 32KB
+    private int $streamThreshold = 4096; // 4KB
 
     private int $frameSplitThreshold = 32768; // 32KB
 
