@@ -58,7 +58,7 @@ final class Rfc6455Client implements Client
     /** @var Message[] */
     private array $messages = [];
 
-    /** @var callable[]|null */
+    /** @var list<Closure(self, int, string):void>|null */
     private ?array $onClose = [];
 
     private ClientMetadata $metadata;
@@ -703,14 +703,14 @@ final class Rfc6455Client implements Client
         return [$this->metadata->closeCode, $this->metadata->closeReason];
     }
 
-    public function onClose(callable $callback): void
+    public function onClose(\Closure $closure): void
     {
         if ($this->onClose === null) {
-            EventLoop::queue(fn () => $callback($this, $this->metadata->closeCode, $this->metadata->closeReason));
+            EventLoop::queue(fn () => $closure($this, $this->metadata->closeCode, $this->metadata->closeReason));
             return;
         }
 
-        $this->onClose[] = $callback;
+        $this->onClose[] = $closure;
     }
 
     /**

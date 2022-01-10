@@ -140,7 +140,7 @@ interface Client
      * Attaches a callback invoked when the client closes. The callback is passed this object as the first parameter,
      * the close code as the second parameter, and the close reason as the third parameter.
      *
-     * @param callable(Client $client, int $code, string $reason) $callback
+     * @param \Closure(Client, int, string):void $closure
      */
-    public function onClose(callable $callback): void;
+    public function onClose(\Closure $closure): void;
 }
