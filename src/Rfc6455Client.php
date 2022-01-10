@@ -6,9 +6,11 @@ use Amp\ByteStream\IterableStream;
 use Amp\ByteStream\ReadableBuffer;
 use Amp\ByteStream\ReadableStream;
 use Amp\ByteStream\StreamException;
+use Amp\Cancellation;
 use Amp\DeferredFuture;
 use Amp\Future;
 use Amp\Pipeline\Emitter;
+use Amp\Pipeline\Pipeline;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Socket\SocketAddress;
@@ -45,18 +47,18 @@ final class Rfc6455Client implements Client
 
     private ?Future $lastWrite = null;
 
-    private ?Future $lastEmit = null;
-
     private bool $masked;
 
     private ?CompressionContext $compressionContext;
 
+    /** @var Emitter<Message> */
+    private Emitter $messageEmitter;
+
+    /** @var Pipeline<Message> */
+    private Pipeline $messagePipeline;
+
+    /** @var Emitter<string>|null */
     private ?Emitter $currentMessageEmitter = null;
-
-    private ?DeferredFuture $nextMessageDeferred = null;
-
-    /** @var Message[] */
-    private array $messages = [];
 
     /** @var list<Closure(self, int, string):void>|null */
     private ?array $onClose = [];
@@ -82,6 +84,9 @@ final class Rfc6455Client implements Client
         $this->masked = $masked;
         $this->compressionContext = $compression;
         $this->closeDeferred = new DeferredFuture;
+
+        $this->messageEmitter = new Emitter;
+        $this->messagePipeline = $this->messageEmitter->pipe();
 
         if (empty(self::$clients)) {
             self::$now = \time();
@@ -138,27 +143,9 @@ final class Rfc6455Client implements Client
         EventLoop::queue(fn() => $this->read());
     }
 
-    public function receive(): ?Message
+    public function receive(?Cancellation $cancellation = null): ?Message
     {
-        if ($this->nextMessageDeferred) {
-            throw new \Error('Await the previous promise returned from receive() before calling receive() again.');
-        }
-
-        // There might be messages already buffered and a close frame already received
-        if ($this->messages) {
-            $message = \reset($this->messages);
-            unset($this->messages[\key($this->messages)]);
-
-            return $message;
-        }
-
-        if ($this->metadata->closedAt) {
-            return null;
-        }
-
-        $this->nextMessageDeferred = new DeferredFuture;
-
-        return $this->nextMessageDeferred->getFuture()->await();
+        return $this->messagePipeline->continue($cancellation);
     }
 
     public function getId(): int
@@ -261,14 +248,6 @@ final class Rfc6455Client implements Client
                     self::$rateDeferreds[$this->metadata->id] = $deferred = new DeferredFuture;
                     $deferred->getFuture()->await();
                 }
-
-                if (!$this->metadata->closedAt) {
-                    try {
-                        $this->lastEmit?->await();
-                    } catch (\Throwable) {
-                        // Ignore if the message was disposed.
-                    }
-                }
             }
         } catch (\Throwable $exception) {
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
@@ -317,13 +296,7 @@ final class Rfc6455Client implements Client
                 $message = Message::fromText($stream);
             }
 
-            if ($this->nextMessageDeferred) {
-                $deferred = $this->nextMessageDeferred;
-                $this->nextMessageDeferred = null;
-                $deferred->complete($message);
-            } else {
-                $this->messages[] = $message;
-            }
+            $this->messageEmitter->yield($message);
 
             if ($terminated) {
                 return;
@@ -336,13 +309,11 @@ final class Rfc6455Client implements Client
             return;
         }
 
-        $future = $this->currentMessageEmitter->emit($data);
-        $this->lastEmit = $this->nextMessageDeferred ? null : $future;
+        $this->currentMessageEmitter->yield($data);
 
         if ($terminated) {
-            $emitter = $this->currentMessageEmitter;
+            $this->currentMessageEmitter?->complete();
             $this->currentMessageEmitter = null;
-            $emitter->complete();
 
             ++$this->metadata->messagesRead;
         }
@@ -657,19 +628,14 @@ final class Rfc6455Client implements Client
             ));
         }
 
-        if ($this->nextMessageDeferred) {
-            $deferred = $this->nextMessageDeferred;
-            $this->nextMessageDeferred = null;
-
-            match ($code) {
-                Code::NORMAL_CLOSE, Code::GOING_AWAY, Code::NONE, => $deferred->complete(),
-                default => $deferred->error(new ClosedException(
-                    'Connection closed abnormally while awaiting message',
-                    $code,
-                    $reason
-                )),
-            };
-        }
+        match ($code) {
+            Code::NORMAL_CLOSE, Code::GOING_AWAY, Code::NONE, => $this->messageEmitter->complete(),
+            default => $this->messageEmitter->error(new ClosedException(
+                'Connection closed abnormally while awaiting message',
+                $code,
+                $reason
+            )),
+        };
 
         try {
             // Wait for peer close frame for configured number of seconds.
@@ -681,7 +647,6 @@ final class Rfc6455Client implements Client
 
         $this->socket->close();
         $this->lastWrite = Future::complete();
-        $this->lastEmit = null;
 
         $onClose = $this->onClose;
         $this->onClose = null;

@@ -3,6 +3,7 @@
 namespace Amp\Websocket;
 
 use Amp\ByteStream\ReadableStream;
+use Amp\Cancellation;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 
@@ -11,11 +12,15 @@ interface Client
     /**
      * Receive a message from the remote Websocket endpoint.
      *
+     * @param Cancellation|null Cancel awaiting for the next message. Note this does not close the connection or
+     * discard the next message. A subsequent call to this method will still return the next message received from
+     * the client.
+     *
      * @return Message|null Returns message sent by the remote or null if the connection closes normally.
      *
      * @throws ClosedException Thrown if the connection is closed abnormally.
      */
-    public function receive(): ?Message;
+    public function receive(?Cancellation $cancellation = null): ?Message;
 
     /**
      * @return int Unique identifier for the client.
