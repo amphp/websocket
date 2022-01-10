@@ -12,9 +12,9 @@ interface Client
     /**
      * Receive a message from the remote Websocket endpoint.
      *
-     * @param Cancellation|null Cancel awaiting for the next message. Note this does not close the connection or
-     * discard the next message. A subsequent call to this method will still return the next message received from
-     * the client.
+     * @param Cancellation|null $cancellation Cancel awaiting the next message. Note this does not close the
+     * connection or discard the next message. A subsequent call to this method will still return the next message
+     * received from the client.
      *
      * @return Message|null Returns message sent by the remote or null if the connection closes normally.
      *
