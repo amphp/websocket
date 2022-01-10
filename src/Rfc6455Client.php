@@ -662,7 +662,7 @@ final class Rfc6455Client implements Client
             $this->nextMessageDeferred = null;
 
             match ($code) {
-                Code::NORMAL_CLOSE, Code::NONE, => $deferred->complete(),
+                Code::NORMAL_CLOSE, Code::GOING_AWAY, Code::NONE, => $deferred->complete(),
                 default => $deferred->error(new ClosedException(
                     'Connection closed abnormally while awaiting message',
                     $code,
