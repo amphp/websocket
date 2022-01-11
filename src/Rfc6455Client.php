@@ -9,6 +9,7 @@ use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
 use Amp\DeferredFuture;
 use Amp\Future;
+use Amp\Pipeline\DisposedException;
 use Amp\Pipeline\Emitter;
 use Amp\Pipeline\Pipeline;
 use Amp\Socket\EncryptableSocket;
@@ -282,23 +283,22 @@ final class Rfc6455Client implements Client
                 return;
             }
 
-            if ($terminated) {
-                $stream = new ReadableBuffer($data);
-                ++$this->metadata->messagesRead;
-            } else {
+            ++$this->metadata->messagesRead;
+
+            if (!$terminated) {
                 $this->currentMessageEmitter = new Emitter;
-                $stream = new IterableStream($this->currentMessageEmitter->pipe());
             }
 
-            if ($opcode === Opcode::BIN) {
-                $message = Message::fromBinary($stream);
-            } else {
-                $message = Message::fromText($stream);
-            }
+            // Avoid holding a reference to the ReadableStream or Message object here so destructors will be invoked
+            // if the message is not consumed by the user.
+            $this->messageEmitter->yield(self::createMessage(
+                $opcode,
+                $this->currentMessageEmitter
+                    ? new IterableStream($this->currentMessageEmitter->pipe())
+                    : new ReadableBuffer($data),
+            ));
 
-            $this->messageEmitter->yield($message);
-
-            if ($terminated) {
+            if (!$this->currentMessageEmitter) {
                 return;
             }
         } elseif ($opcode !== Opcode::CONT) {
@@ -309,14 +309,25 @@ final class Rfc6455Client implements Client
             return;
         }
 
-        $this->currentMessageEmitter->yield($data);
+        try {
+            $this->currentMessageEmitter->yield($data);
+        } catch (DisposedException) {
+            // Message disposed, ignore exception.
+        }
 
         if ($terminated) {
-            $this->currentMessageEmitter?->complete();
+            $this->currentMessageEmitter->complete();
             $this->currentMessageEmitter = null;
-
-            ++$this->metadata->messagesRead;
         }
+    }
+
+    private static function createMessage(int $opcode, ReadableStream $stream): Message
+    {
+        if ($opcode === Opcode::BIN) {
+            return Message::fromBinary($stream);
+        }
+
+        return Message::fromText($stream);
     }
 
     private function onControlFrame(int $opcode, string $data): void
@@ -532,7 +543,7 @@ final class Rfc6455Client implements Client
 
                         if ($compress) {
                             /** @psalm-suppress PossiblyNullReference */
-                            $split = $this->compressionContext->compress($chunk, false);
+                            $split = $this->compressionContext->compress($split, false);
                         }
 
                         $this->write($split, $opcode, $rsv, false);
