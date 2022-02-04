@@ -146,8 +146,16 @@ final class Rfc6455Client implements Client
 
     public function receive(?Cancellation $cancellation = null): ?Message
     {
-        // TODO this method no longer exists
-        return $this->messagePipeline->getIterator()->continue($cancellation);
+        $it = $this->messageEmitter->iterate();
+        try {
+            if($it->continue($cancellation)) {
+                return $it->getValue();
+            } else {
+                return null;
+            }
+        } catch (DisposedException) {
+            return null;
+        }
     }
 
     public function getId(): int
@@ -311,7 +319,7 @@ final class Rfc6455Client implements Client
         }
 
         try {
-            $this->currentMessageEmitter->yield($data);
+            $this->currentMessageEmitter->push($data);
         } catch (DisposedException) {
             // Message disposed, ignore exception.
         }
