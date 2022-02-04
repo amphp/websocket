@@ -2,11 +2,11 @@
 
 namespace Amp\Websocket\Test;
 
-use Amp\ByteStream\IterableStream;
+use Amp\ByteStream\ReadableIterableStream;
 use Amp\DeferredFuture;
 use Amp\Future;
 use Amp\PHPUnit\AsyncTestCase;
-use Amp\Pipeline\Emitter;
+use Amp\Pipeline\Queue;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Websocket\ClosedException;
@@ -212,13 +212,13 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        $emitter = new Emitter();
-        $emitter->emit('chunk1');
-        $emitter->emit('chunk2');
-        $emitter->emit('chunk3');
+        $emitter = new Queue();
+        $emitter->pushAsync('chunk1');
+        $emitter->pushAsync('chunk2');
+        $emitter->pushAsync('chunk3');
         $emitter->complete();
 
-        $stream = new IterableStream($emitter->pipe());
+        $stream = new ReadableIterableStream($emitter->pipe());
 
         $client->stream($stream);
 
@@ -241,14 +241,14 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault()->withStreamThreshold(10), false);
 
-        $emitter = new Emitter;
-        $emitter->emit('chunk1');
-        $emitter->emit('chunk2');
-        $emitter->emit('chunk');
-        $emitter->emit('3');
+        $emitter = new Queue();
+        $emitter->pushAsync('chunk1');
+        $emitter->pushAsync('chunk2');
+        $emitter->pushAsync('chunk');
+        $emitter->pushAsync('3');
         $emitter->complete();
 
-        $stream = new IterableStream($emitter->pipe());
+        $stream = new ReadableIterableStream($emitter->pipe());
 
         $client->stream($stream);
     }

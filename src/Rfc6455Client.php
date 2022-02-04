@@ -2,16 +2,16 @@
 
 namespace Amp\Websocket;
 
-use Amp\ByteStream\IterableStream;
 use Amp\ByteStream\ReadableBuffer;
+use Amp\ByteStream\ReadableIterableStream;
 use Amp\ByteStream\ReadableStream;
 use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
 use Amp\DeferredFuture;
 use Amp\Future;
 use Amp\Pipeline\DisposedException;
-use Amp\Pipeline\Emitter;
 use Amp\Pipeline\Pipeline;
+use Amp\Pipeline\Queue;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Socket\SocketAddress;
@@ -52,14 +52,14 @@ final class Rfc6455Client implements Client
 
     private ?CompressionContext $compressionContext;
 
-    /** @var Emitter<Message> */
-    private Emitter $messageEmitter;
+    /** @var Queue<Message> */
+    private Queue $messageEmitter;
 
     /** @var Pipeline<Message> */
     private Pipeline $messagePipeline;
 
-    /** @var Emitter<string>|null */
-    private ?Emitter $currentMessageEmitter = null;
+    /** @var Queue<string>|null */
+    private ?Queue $currentMessageEmitter = null;
 
     /** @var list<Closure(self, int, string):void>|null */
     private ?array $onClose = [];
@@ -86,7 +86,7 @@ final class Rfc6455Client implements Client
         $this->compressionContext = $compression;
         $this->closeDeferred = new DeferredFuture;
 
-        $this->messageEmitter = new Emitter;
+        $this->messageEmitter = new Queue();
         $this->messagePipeline = $this->messageEmitter->pipe();
 
         if (empty(self::$clients)) {
@@ -146,7 +146,8 @@ final class Rfc6455Client implements Client
 
     public function receive(?Cancellation $cancellation = null): ?Message
     {
-        return $this->messagePipeline->continue($cancellation);
+        // TODO this method no longer exists
+        return $this->messagePipeline->getIterator()->continue($cancellation);
     }
 
     public function getId(): int
@@ -286,15 +287,15 @@ final class Rfc6455Client implements Client
             ++$this->metadata->messagesRead;
 
             if (!$terminated) {
-                $this->currentMessageEmitter = new Emitter;
+                $this->currentMessageEmitter = new Queue();
             }
 
             // Avoid holding a reference to the ReadableStream or Message object here so destructors will be invoked
             // if the message is not consumed by the user.
-            $this->messageEmitter->yield(self::createMessage(
+            $this->messageEmitter->push(self::createMessage(
                 $opcode,
                 $this->currentMessageEmitter
-                    ? new IterableStream($this->currentMessageEmitter->pipe())
+                    ? new ReadableIterableStream($this->currentMessageEmitter->pipe())
                     : new ReadableBuffer($data),
             ));
 
