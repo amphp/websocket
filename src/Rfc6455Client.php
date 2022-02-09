@@ -11,7 +11,6 @@ use Amp\DeferredFuture;
 use Amp\Future;
 use Amp\Pipeline\ConcurrentIterator;
 use Amp\Pipeline\DisposedException;
-use Amp\Pipeline\Pipeline;
 use Amp\Pipeline\Queue;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
@@ -88,7 +87,7 @@ final class Rfc6455Client implements Client
         $this->closeDeferred = new DeferredFuture;
 
         $this->messageEmitter = new Queue();
-        $this->messageIterator = $this->messageEmitter->pipe()->getIterator();
+        $this->messageIterator = $this->messageEmitter->iterate();
 
         if (empty(self::$clients)) {
             self::$now = \time();
