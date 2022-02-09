@@ -9,6 +9,7 @@ use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
 use Amp\DeferredFuture;
 use Amp\Future;
+use Amp\Pipeline\ConcurrentIterator;
 use Amp\Pipeline\DisposedException;
 use Amp\Pipeline\Pipeline;
 use Amp\Pipeline\Queue;
@@ -55,8 +56,8 @@ final class Rfc6455Client implements Client
     /** @var Queue<Message> */
     private Queue $messageEmitter;
 
-    /** @var Pipeline<Message> */
-    private Pipeline $messagePipeline;
+    /** @var ConcurrentIterator<Message> */
+    private ConcurrentIterator $messageIterator;
 
     /** @var Queue<string>|null */
     private ?Queue $currentMessageEmitter = null;
@@ -87,7 +88,7 @@ final class Rfc6455Client implements Client
         $this->closeDeferred = new DeferredFuture;
 
         $this->messageEmitter = new Queue();
-        $this->messagePipeline = $this->messageEmitter->pipe();
+        $this->messageIterator = $this->messageEmitter->pipe()->getIterator();
 
         if (empty(self::$clients)) {
             self::$now = \time();
@@ -146,10 +147,9 @@ final class Rfc6455Client implements Client
 
     public function receive(?Cancellation $cancellation = null): ?Message
     {
-        $it = $this->messageEmitter->iterate();
         try {
-            if($it->continue($cancellation)) {
-                return $it->getValue();
+            if($this->messageIterator->continue($cancellation)) {
+                return $this->messageIterator->getValue();
             } else {
                 return null;
             }
