@@ -107,4 +107,9 @@ final class Message implements ReadableStream
     {
         return $this->stream->isClosed();
     }
+
+    public function onClose(\Closure $onClose): void
+    {
+        $this->stream->onClose($onClose);
+    }
 }
