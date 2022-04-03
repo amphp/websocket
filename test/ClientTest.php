@@ -70,7 +70,7 @@ class ClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
 
-        $future = async(fn() => $client->receive()); // Promise should fail due to abnormal close.
+        $future = async(fn () => $client->receive()); // Promise should fail due to abnormal close.
 
         delay(0);
 
@@ -117,7 +117,7 @@ class ClientTest extends AsyncTestCase
             $invoked = true;
         });
 
-        $future = async(fn() => $client->receive()); // Promise should resolve with null on normal close.
+        $future = async(fn () => $client->receive()); // Promise should resolve with null on normal close.
 
         delay(0);
 
@@ -268,7 +268,7 @@ class ClientTest extends AsyncTestCase
         $deferred = new DeferredFuture;
 
         $socket->method('read')
-            ->willReturnCallback(fn() => $deferred->getFuture()->await());
+            ->willReturnCallback(fn () => $deferred->getFuture()->await());
 
         $socket->expects($this->once())
             ->method('write');
@@ -283,8 +283,8 @@ class ClientTest extends AsyncTestCase
 
         $client->onClose($this->createCallback(1));
 
-        $future1 = async(fn() => $client->close(Code::NORMAL_CLOSE, 'First close'));
-        $future2 = async(fn() => $client->close(Code::ABNORMAL_CLOSE, 'Second close'));
+        $future1 = async(fn () => $client->close(Code::NORMAL_CLOSE, 'First close'));
+        $future2 = async(fn () => $client->close(Code::ABNORMAL_CLOSE, 'Second close'));
 
         try {
             [[$code1, $reason1], [$code2, $reason2]] = Future\all([$future1, $future2]);

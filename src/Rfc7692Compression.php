@@ -130,15 +130,13 @@ final class Rfc7692Compression implements CompressionContext
         return new self($serverWindowSize, $clientWindowSize, $serverContextTakeover, $clientContextTakeover);
     }
 
-    /** @var resource */
-    private $deflate;
+    private readonly \DeflateContext $deflate;
 
-    /** @var resource */
-    private $inflate;
+    private readonly \InflateContext $inflate;
 
-    private int $sendingFlushMode;
+    private readonly int $sendingFlushMode;
 
-    private int $receivingFlushMode;
+    private readonly int $receivingFlushMode;
 
     private function __construct(
         int $receivingWindowSize,

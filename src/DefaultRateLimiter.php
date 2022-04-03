@@ -16,11 +16,11 @@ class DefaultRateLimiter implements RateLimiter
     /** @var Suspension[] */
     private array $rateSuspensions = [];
 
-    private string $watcher;
+    private readonly string $watcher;
 
     public function __construct(
-        private int $bytesPerSecondLimit = 1048576, // 1MB
-        private int $framesPerSecondLimit = 100,
+        private readonly int $bytesPerSecondLimit = 1048576, // 1MB
+        private readonly int $framesPerSecondLimit = 100,
     ) {
         $rateSuspensions = &$this->rateSuspensions;
         $bytesReadInLastSecond = &$this->bytesReadInLastSecond;

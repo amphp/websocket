@@ -19,9 +19,7 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
         int $queuedPingLimit = 3,
         private int $heartbeatPeriod = 10,
     ) {
-        $this->heartbeatTimeouts = $heartbeatTimeouts = new class(\PHP_INT_MAX)
-            extends LRUCache
-            implements \IteratorAggregate {
+        $this->heartbeatTimeouts = $heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
             public function getIterator(): \Iterator
             {
                 yield from $this->data;

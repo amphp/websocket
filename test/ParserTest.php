@@ -2,7 +2,6 @@
 
 namespace Amp\Websocket\Test;
 
-use Amp\Future;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket\Socket;
 use Amp\Websocket\ClosedException;

@@ -43,12 +43,12 @@ final class Rfc6455Client implements Client
      * @param bool $masked True for client, false for server.
      */
     public function __construct(
-        private Socket $socket,
-        private Options $options,
-        private bool $masked,
-        private ?CompressionContext $compressionContext = null,
-        private ?HeartbeatQueue $heartbeatQueue = null,
-        private ?RateLimiter $rateLimiter = null,
+        private readonly Socket $socket,
+        private readonly Options $options,
+        private readonly bool $masked,
+        private readonly ?CompressionContext $compressionContext = null,
+        private readonly ?HeartbeatQueue $heartbeatQueue = null,
+        private readonly ?RateLimiter $rateLimiter = null,
     ) {
         $this->closeDeferred = new DeferredFuture;
 
@@ -67,9 +67,8 @@ final class Rfc6455Client implements Client
         try {
             if ($this->messageIterator->continue($cancellation)) {
                 return $this->messageIterator->getValue();
-            } else {
-                return null;
             }
+            return null;
         } catch (DisposedException) {
             return null;
         }
