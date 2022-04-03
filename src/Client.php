@@ -119,11 +119,6 @@ interface Client
     public function ping(): void;
 
     /**
-     * @return Options The options object associated with this client.
-     */
-    public function getOptions(): Options;
-
-    /**
      * Returns connection metadata.
      *
      * @return ClientMetadata

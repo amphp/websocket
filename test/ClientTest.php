@@ -12,7 +12,6 @@ use Amp\Socket\Socket;
 use Amp\Websocket\ClosedException;
 use Amp\Websocket\Code;
 use Amp\Websocket\Opcode;
-use Amp\Websocket\Options;
 use Amp\Websocket\Rfc6455Client;
 use PHPUnit\Framework\MockObject\MockObject;
 use Revolt\EventLoop;
@@ -32,10 +31,9 @@ class ClientTest extends AsyncTestCase
     public function testGetId(): void
     {
         $socket = $this->createSocket();
-        $options = Options::createServerDefault();
 
-        $client1 = new Rfc6455Client($socket, $options, false);
-        $client2 = new Rfc6455Client($socket, $options, false);
+        $client1 = new Rfc6455Client($socket, masked: false);
+        $client2 = new Rfc6455Client($socket, masked: false);
 
         $this->assertNotSame($client1->getId(), $client2->getId());
 
@@ -68,7 +66,7 @@ class ClientTest extends AsyncTestCase
                 return null;
             });
 
-        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, masked: false);
 
         $future = async(fn () => $client->receive()); // Promise should fail due to abnormal close.
 
@@ -110,7 +108,7 @@ class ClientTest extends AsyncTestCase
                 return null;
             });
 
-        $client = new Rfc6455Client($socket, Options::createServerDefault()->withClosePeriod(1), false);
+        $client = new Rfc6455Client($socket, masked: false, closePeriod: 1);
 
         $invoked = false;
         $client->onClose(function () use (&$invoked) {
@@ -144,7 +142,7 @@ class ClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive([$packet]);
 
-        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, masked: false);
 
         $client->ping();
 
@@ -159,7 +157,7 @@ class ClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive([$packet]);
 
-        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, masked: false);
 
         $client->send('data');
 
@@ -182,7 +180,7 @@ class ClientTest extends AsyncTestCase
                 return [$packet];
             }, $packets));
 
-        $client = new Rfc6455Client($socket, Options::createServerDefault()->withFrameSplitThreshold(6), false);
+        $client = new Rfc6455Client($socket, masked: false, frameSplitThreshold: 6);
 
         $client->send('chunk1chunk2chunk3end');
     }
@@ -195,7 +193,7 @@ class ClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive([$packet]);
 
-        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, masked: false);
 
         $client->sendBinary('data');
 
@@ -210,7 +208,7 @@ class ClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive([$packet]);
 
-        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, masked: false);
 
         $emitter = new Queue();
         $emitter->pushAsync('chunk1');
@@ -239,7 +237,7 @@ class ClientTest extends AsyncTestCase
                 return [$packet];
             }, $packets));
 
-        $client = new Rfc6455Client($socket, Options::createServerDefault()->withStreamThreshold(10), false);
+        $client = new Rfc6455Client($socket, masked: false, streamThreshold: 10);
 
         $emitter = new Queue();
         $emitter->pushAsync('chunk1');
@@ -279,7 +277,7 @@ class ClientTest extends AsyncTestCase
                 $deferred->complete(null);
             });
 
-        $client = new Rfc6455Client($socket, Options::createServerDefault()->withClosePeriod(1), false);
+        $client = new Rfc6455Client($socket, masked: false, closePeriod: 1);
 
         $client->onClose($this->createCallback(1));
 

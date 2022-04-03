@@ -7,7 +7,6 @@ use Amp\Socket\Socket;
 use Amp\Websocket\ClosedException;
 use Amp\Websocket\Code;
 use Amp\Websocket\Opcode;
-use Amp\Websocket\Options;
 use Amp\Websocket\Rfc6455Client;
 use function Amp\delay;
 
@@ -37,7 +36,7 @@ class ParserTest extends AsyncTestCase
                 return null;
             });
 
-        $client = new Rfc6455Client($socket, Options::createServerDefault(), false);
+        $client = new Rfc6455Client($socket, masked: false);
 
         try {
             while ($message = $client->receive()) {

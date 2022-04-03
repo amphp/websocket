@@ -44,11 +44,17 @@ final class Rfc6455Client implements Client
      */
     public function __construct(
         private readonly Socket $socket,
-        private readonly Options $options,
         private readonly bool $masked,
         private readonly ?CompressionContext $compressionContext = null,
         private readonly ?HeartbeatQueue $heartbeatQueue = null,
         private readonly ?RateLimiter $rateLimiter = null,
+        private readonly bool $textOnly = false,
+        private readonly bool $validateUtf8 = true,
+        private readonly int $messageSizeLimit = 10485760, // 10MB
+        private readonly int $frameSizeLimit = 2097152, // 2MB
+        private readonly int $streamThreshold = 4096, // 4KB
+        private readonly int $frameSplitThreshold = 32768, // 32KB
+        private readonly float $closePeriod = 3,
     ) {
         $this->closeDeferred = new DeferredFuture;
 
@@ -129,11 +135,6 @@ final class Rfc6455Client implements Client
         }
 
         return $this->metadata->closedByPeer;
-    }
-
-    public function getOptions(): Options
-    {
-        return $this->options;
     }
 
     public function getInfo(): ClientMetadata
@@ -286,7 +287,7 @@ final class Rfc6455Client implements Client
                     ) {
                         $code = Code::PROTOCOL_ERROR;
                         $reason = 'Invalid close code';
-                    } elseif ($this->options->isValidateUtf8() && !\preg_match('//u', $reason)) {
+                    } elseif ($this->validateUtf8 && !\preg_match('//u', $reason)) {
                         $code = Code::INCONSISTENT_FRAME_DATA_TYPE;
                         $reason = 'Close reason must be valid UTF-8';
                     }
@@ -347,7 +348,7 @@ final class Rfc6455Client implements Client
 
     private function pushData(string $data, int $opcode): void
     {
-        if ($this->lastWrite || \strlen($data) > $this->options->getFrameSplitThreshold()) {
+        if ($this->lastWrite || \strlen($data) > $this->frameSplitThreshold) {
             // Treat as a stream if another stream is pending or if splitting the data into multiple frames.
             $this->pushStream(new ReadableBuffer($data), $opcode);
             return;
@@ -427,15 +428,13 @@ final class Rfc6455Client implements Client
 
             $chunks = [$chunk];
             $bufferedLength = \strlen($chunk);
-            $streamThreshold = $this->options->getStreamThreshold();
-            $splitThreshold = $this->options->getFrameSplitThreshold();
 
             do {
                 do {
                     // Perform another read to avoid sending an empty frame on stream end.
                     $chunk = $stream->read();
 
-                    if ($chunk === null || $bufferedLength >= $streamThreshold) {
+                    if ($chunk === null || $bufferedLength >= $this->streamThreshold) {
                         break;
                     }
 
@@ -446,9 +445,9 @@ final class Rfc6455Client implements Client
                 $buffer = \count($chunks) === 1 ? $chunks[0] : \implode($chunks);
                 $chunks = [$chunk];
 
-                if ($bufferedLength > $splitThreshold) {
+                if ($bufferedLength > $this->frameSplitThreshold) {
                     $splitLength = $bufferedLength;
-                    $slices = (int) \ceil($splitLength / $splitThreshold);
+                    $slices = (int) \ceil($splitLength / $this->frameSplitThreshold);
                     $splitLength = (int) \ceil($splitLength / $slices);
 
                     for ($i = 0; $i < $slices - 1; ++$i) {
@@ -564,7 +563,7 @@ final class Rfc6455Client implements Client
         try {
             // Wait for peer close frame for configured number of seconds.
             $this->closeDeferred?->getFuture()
-                ->await(new TimeoutCancellation($this->options->getClosePeriod()));
+                ->await(new TimeoutCancellation($this->closePeriod));
         } catch (\Throwable $exception) {
             // Failed to write close frame or to receive response frame, but we were disconnecting anyway.
         }
@@ -603,10 +602,7 @@ final class Rfc6455Client implements Client
      */
     private function parser(): \Generator
     {
-        $frameSizeLimit = $this->options->getFrameSizeLimit();
-        $messageSizeLimit = $this->options->getMessageSizeLimit();
-        $textOnly = $this->options->isTextOnly();
-        $doUtf8Validation = $validateUtf8 = $this->options->isValidateUtf8();
+        $doUtf8Validation = $this->validateUtf8;
 
         $compressionContext = $this->compressionContext;
         $compressedFlag = $compressionContext ? $compressionContext->getRsv() : 0;
@@ -665,7 +661,7 @@ final class Rfc6455Client implements Client
                     return;
                 }
 
-                $doUtf8Validation = $validateUtf8 && $opcode === Opcode::TEXT;
+                $doUtf8Validation = $this->validateUtf8 && $opcode === Opcode::TEXT;
                 $compressed = (bool) ($rsv & $compressedFlag);
             }
 
@@ -739,7 +735,7 @@ final class Rfc6455Client implements Client
                 }
             }
 
-            if ($frameSizeLimit && $frameLength > $frameSizeLimit) {
+            if ($this->frameSizeLimit && $frameLength > $this->frameSizeLimit) {
                 $this->onError(
                     Code::MESSAGE_TOO_LARGE,
                     'Received payload exceeds maximum allowable size'
@@ -747,7 +743,7 @@ final class Rfc6455Client implements Client
                 return;
             }
 
-            if ($messageSizeLimit && ($frameLength + $dataMsgBytesRecd) > $messageSizeLimit) {
+            if ($this->messageSizeLimit && ($frameLength + $dataMsgBytesRecd) > $this->messageSizeLimit) {
                 $this->onError(
                     Code::MESSAGE_TOO_LARGE,
                     'Received payload exceeds maximum allowable size'
@@ -755,7 +751,7 @@ final class Rfc6455Client implements Client
                 return;
             }
 
-            if ($textOnly && $opcode === Opcode::BIN) {
+            if ($this->textOnly && $opcode === Opcode::BIN) {
                 $this->onError(
                     Code::UNACCEPTABLE_TYPE,
                     'BINARY opcodes (0x02) not accepted'
