@@ -17,40 +17,11 @@ use Amp\Socket\Socket;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 use Amp\TimeoutCancellation;
-use cash\LRUCache;
 use Revolt\EventLoop;
 
 final class Rfc6455Client implements Client
 {
-    /** @var self[] */
-    private static array $clients = [];
-
-    /** @var int[] */
-    private static array $bytesReadInLastSecond = [];
-
-    /** @var int[] */
-    private static array $framesReadInLastSecond = [];
-
-    /** @var DeferredFuture[] */
-    private static array $rateDeferreds = [];
-
-    private static string $watcher;
-
-    /** @var LRUCache&\IteratorAggregate Least-recently-used cache of next ping (heartbeat) times. */
-    private static LRUCache $heartbeatTimeouts;
-
-    /** @var int Cached current time. */
-    private static int $now;
-
-    private Options $options;
-
-    private Socket $socket;
-
     private ?Future $lastWrite = null;
-
-    private bool $masked;
-
-    private ?CompressionContext $compressionContext;
 
     /** @var Queue<Message> */
     private Queue $messageEmitter;
@@ -69,85 +40,32 @@ final class Rfc6455Client implements Client
     private ?DeferredFuture $closeDeferred;
 
     /**
-     * @param Socket                  $socket
-     * @param Options                 $options
-     * @param bool                    $masked True for client, false for server.
-     * @param CompressionContext|null $compression
+     * @param bool $masked True for client, false for server.
      */
     public function __construct(
-        Socket $socket,
-        Options $options,
-        bool $masked,
-        ?CompressionContext $compression = null
+        private Socket $socket,
+        private Options $options,
+        private bool $masked,
+        private ?CompressionContext $compressionContext = null,
+        private ?HeartbeatQueue $heartbeatQueue = null,
+        private ?RateLimiter $rateLimiter = null,
     ) {
-        $this->socket = $socket;
-        $this->options = $options;
-        $this->masked = $masked;
-        $this->compressionContext = $compression;
         $this->closeDeferred = new DeferredFuture;
 
         $this->messageEmitter = new Queue();
         $this->messageIterator = $this->messageEmitter->iterate();
 
-        if (empty(self::$clients)) {
-            self::$now = \time();
-            self::$heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
-                public function getIterator(): \Iterator
-                {
-                    yield from $this->data;
-                }
-            };
+        $this->metadata = new ClientMetadata(\time(), $this->compressionContext !== null);
 
-            self::$watcher = EventLoop::repeat(1, static function (): void {
-                self::$now = \time();
+        $this->heartbeatQueue?->insert($this);
 
-                self::$bytesReadInLastSecond = [];
-                self::$framesReadInLastSecond = [];
-
-                if (!empty(self::$rateDeferreds)) {
-                    EventLoop::unreference(self::$watcher);
-
-                    $rateDeferreds = self::$rateDeferreds;
-                    self::$rateDeferreds = [];
-
-                    foreach ($rateDeferreds as $deferred) {
-                        $deferred->complete();
-                    }
-                }
-
-                foreach (self::$heartbeatTimeouts as $clientId => $expiryTime) {
-                    if ($expiryTime >= self::$now) {
-                        break;
-                    }
-
-                    $client = self::$clients[$clientId];
-                    self::$heartbeatTimeouts->put($clientId, self::$now + $client->options->getHeartbeatPeriod());
-
-                    if ($client->getUnansweredPingCount() > $client->options->getQueuedPingLimit()) {
-                        $client->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
-                        continue;
-                    }
-
-                    $client->ping();
-                }
-            });
-            EventLoop::unreference(self::$watcher);
-        }
-
-        $this->metadata = new ClientMetadata(self::$now, $compression !== null);
-        self::$clients[$this->metadata->id] = $this;
-
-        if ($this->options->isHeartbeatEnabled()) {
-            self::$heartbeatTimeouts->put($this->metadata->id, self::$now + $this->options->getHeartbeatPeriod());
-        }
-
-        EventLoop::queue(fn() => $this->read());
+        EventLoop::queue(fn () => $this->read());
     }
 
     public function receive(?Cancellation $cancellation = null): ?Message
     {
         try {
-            if($this->messageIterator->continue($cancellation)) {
+            if ($this->messageIterator->continue($cancellation)) {
                 return $this->messageIterator->getValue();
             } else {
                 return null;
@@ -226,11 +144,6 @@ final class Rfc6455Client implements Client
 
     private function read(): void
     {
-        $maxFramesPerSecond = $this->options->getFramesPerSecondLimit();
-        $maxBytesPerSecond = $this->options->getBytesPerSecondLimit();
-        $heartbeatEnabled = $this->options->isHeartbeatEnabled();
-        $heartbeatPeriod = $this->options->getHeartbeatPeriod();
-
         $parser = $this->parser();
 
         try {
@@ -239,24 +152,17 @@ final class Rfc6455Client implements Client
                     continue;
                 }
 
-                $this->metadata->lastReadAt = self::$now;
+                $this->metadata->lastReadAt = \time();
                 $this->metadata->bytesRead += \strlen($chunk);
-                self::$bytesReadInLastSecond[$this->metadata->id] = (self::$bytesReadInLastSecond[$this->metadata->id] ?? 0) + \strlen($chunk);
 
-                if ($heartbeatEnabled) {
-                    self::$heartbeatTimeouts->put($this->metadata->id, self::$now + $heartbeatPeriod);
-                }
+                $this->rateLimiter?->addToByteCount($this, \strlen($chunk));
+                $this->heartbeatQueue?->update($this);
 
                 $parser->send($chunk);
 
                 $chunk = ''; // Free memory from last chunk read.
 
-                if ((self::$framesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxFramesPerSecond
-                    || (self::$bytesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxBytesPerSecond) {
-                    EventLoop::reference(self::$watcher); // Reference watcher to keep loop running until rate limit released.
-                    self::$rateDeferreds[$this->metadata->id] = $deferred = new DeferredFuture;
-                    $deferred->getFuture()->await();
-                }
+                $this->rateLimiter?->getSuspension($this)?->suspend();
             }
         } catch (\Throwable $exception) {
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
@@ -278,9 +184,9 @@ final class Rfc6455Client implements Client
             return;
         }
 
-        $this->metadata->lastDataReadAt = self::$now;
+        $this->metadata->lastDataReadAt = \time();
         ++$this->metadata->framesRead;
-        self::$framesReadInLastSecond[$this->metadata->id] = (self::$framesReadInLastSecond[$this->metadata->id] ?? 0) + 1;
+        $this->rateLimiter?->addToFrameCount($this, 1);
 
         if (!$this->currentMessageEmitter) {
             if ($opcode === Opcode::CONT) {
@@ -346,7 +252,7 @@ final class Rfc6455Client implements Client
         }
 
         ++$this->metadata->framesRead;
-        self::$framesReadInLastSecond[$this->metadata->id] = (self::$framesReadInLastSecond[$this->metadata->id] ?? 0) + 1;
+        $this->rateLimiter?->addToFrameCount($this, 1);
 
         switch ($opcode) {
             case Opcode::CLOSE:
@@ -435,7 +341,7 @@ final class Rfc6455Client implements Client
 
     public function ping(): void
     {
-        $this->metadata->lastHeartbeatAt = self::$now;
+        $this->metadata->lastHeartbeatAt = \time();
         ++$this->metadata->pingCount;
         $this->write((string) $this->metadata->pingCount, Opcode::PING);
     }
@@ -455,7 +361,7 @@ final class Rfc6455Client implements Client
     private function sendData(string $data, int $opcode): void
     {
         ++$this->metadata->messagesSent;
-        $this->metadata->lastDataSentAt = self::$now;
+        $this->metadata->lastDataSentAt = \time();
 
         $rsv = 0;
 
@@ -469,7 +375,7 @@ final class Rfc6455Client implements Client
 
         try {
             $this->write($data, $opcode, $rsv, true);
-        } catch(\Throwable $exception) {
+        } catch (\Throwable $exception) {
             $code = Code::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
             $this->close($code, $reason);
@@ -502,7 +408,7 @@ final class Rfc6455Client implements Client
     private function sendStream(ReadableStream $stream, int $opcode): void
     {
         ++$this->metadata->messagesSent;
-        $this->metadata->lastDataSentAt = self::$now;
+        $this->metadata->lastDataSentAt = \time();
 
         $rsv = 0;
         $compress = false;
@@ -589,7 +495,7 @@ final class Rfc6455Client implements Client
 
         ++$this->metadata->framesSent;
         $this->metadata->bytesSent += \strlen($frame);
-        $this->metadata->lastSentAt = self::$now;
+        $this->metadata->lastSentAt = \time();
 
         $this->socket->write($frame);
     }
@@ -625,7 +531,7 @@ final class Rfc6455Client implements Client
 
         \assert($code !== Code::NONE || $reason === '');
 
-        $this->metadata->closedAt = self::$now;
+        $this->metadata->closedAt = \time();
         $this->metadata->closeCode = $code;
         $this->metadata->closeReason = $reason;
 
@@ -676,13 +582,7 @@ final class Rfc6455Client implements Client
             }
         }
 
-        unset(self::$clients[$this->metadata->id]);
-        self::$heartbeatTimeouts->remove($this->metadata->id);
-
-        if (empty(self::$clients)) {
-            EventLoop::cancel(self::$watcher);
-            self::$heartbeatTimeouts->clear();
-        }
+        $this->heartbeatQueue?->remove($this);
 
         return [$this->metadata->closeCode, $this->metadata->closeReason];
     }
