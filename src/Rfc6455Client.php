@@ -48,13 +48,13 @@ final class Rfc6455Client implements Client
         private readonly ?CompressionContext $compressionContext = null,
         private readonly ?HeartbeatQueue $heartbeatQueue = null,
         private readonly ?RateLimiter $rateLimiter = null,
-        private readonly bool $textOnly = false,
-        private readonly bool $validateUtf8 = true,
-        private readonly int $messageSizeLimit = 10485760, // 10MB
-        private readonly int $frameSizeLimit = 2097152, // 2MB
-        private readonly int $streamThreshold = 4096, // 4KB
-        private readonly int $frameSplitThreshold = 32768, // 32KB
-        private readonly float $closePeriod = 3,
+        private readonly bool $textOnly = self::DEFAULT_TEXT_ONLY,
+        private readonly bool $validateUtf8 = self::DEFAULT_VALIDATE_UTF8,
+        private readonly int $messageSizeLimit = self::DEFAULT_MESSAGE_SIZE_LIMIT,
+        private readonly int $frameSizeLimit = self::DEFAULT_FRAME_SIZE_LIMIT,
+        private readonly int $streamThreshold = self::DEFAULT_STREAM_THRESHOLD,
+        private readonly int $frameSplitThreshold = self::DEFAULT_FRAME_SPLIT_THRESHOLD,
+        private readonly float $closePeriod = self::DEFAULT_CLOSE_PERIOD,
     ) {
         $this->closeDeferred = new DeferredFuture;
 
