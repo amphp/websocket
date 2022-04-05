@@ -146,7 +146,7 @@ interface Client extends Closable
      * Attaches a callback invoked when the client closes. The callback is passed the close code as the first
      * parameter and the close reason as the second parameter.
      *
-     * @param \Closure(int, string):void $onClose
+     * @param \Closure(ClientMetadata):void $onClose
      */
     public function onClose(\Closure $onClose): void;
 }

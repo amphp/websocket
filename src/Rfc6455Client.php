@@ -32,7 +32,7 @@ final class Rfc6455Client implements Client
     /** @var Queue<string>|null */
     private ?Queue $currentMessageEmitter = null;
 
-    /** @var list<Closure(int, string):void>|null */
+    /** @var list<Closure(ClientMetadata):void>|null */
     private ?array $onClose = [];
 
     private ClientMetadata $metadata;
@@ -584,7 +584,7 @@ final class Rfc6455Client implements Client
 
         if ($onClose !== null) {
             foreach ($onClose as $callback) {
-                EventLoop::queue($callback, $code, $reason);
+                EventLoop::queue($callback, $this->getInfo());
             }
         }
 
@@ -594,7 +594,7 @@ final class Rfc6455Client implements Client
     public function onClose(\Closure $onClose): void
     {
         if ($this->onClose === null) {
-            EventLoop::queue($onClose, $this->metadata->closeCode, $this->metadata->closeReason);
+            EventLoop::queue($onClose, $this->getInfo());
             return;
         }
 
