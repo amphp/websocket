@@ -13,9 +13,9 @@ use Amp\Cancellation;
  */
 final class Message implements ReadableStream
 {
-    private Payload $stream;
+    private readonly Payload $stream;
 
-    private bool $binary;
+    private readonly bool $binary;
 
     /**
      * Create a Message from a UTF-8 text stream.

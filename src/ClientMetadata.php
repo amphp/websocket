@@ -5,9 +5,9 @@ namespace Amp\Websocket;
 final class ClientMetadata
 {
     /** @var int Next sequential client ID. */
-    private static int $nextId = 1;
+    private static int $nextId = 0;
 
-    public int $id;
+    public readonly int $id;
 
     public bool $closedByPeer = false;
 
@@ -15,7 +15,7 @@ final class ClientMetadata
 
     public ?string $closeReason = null;
 
-    public int $connectedAt;
+    public readonly int $connectedAt;
 
     public int $closedAt = 0;
 
@@ -45,7 +45,7 @@ final class ClientMetadata
 
     public int $pongCount = 0;
 
-    public bool $compressionEnabled;
+    public readonly bool $compressionEnabled;
 
     /**
      * @param int $connectedAt Current timestamp.

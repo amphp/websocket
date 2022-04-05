@@ -10,10 +10,10 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
     /** @var array<int, \WeakReference<Client>> */
     private array $clients = [];
 
-    private string $watcher;
+    private readonly string $watcher;
 
-    /** @var LRUCache&\IteratorAggregate Least-recently-used cache of next ping (heartbeat) times. */
-    private LRUCache $heartbeatTimeouts;
+    /** @var LRUCache&\Traversable Least-recently-used cache of next ping (heartbeat) times. */
+    private readonly LRUCache&\Traversable $heartbeatTimeouts;
 
     public function __construct(
         int $queuedPingLimit = 3,
