@@ -6,7 +6,7 @@ namespace Amp\Websocket;
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
 /**
- * @param int $length Random bytes to use to generate the key.
+ * @param positive-int $length Random bytes to use to generate the key.
  *
  * @return string
  *

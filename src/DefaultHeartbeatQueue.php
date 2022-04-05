@@ -13,7 +13,7 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
     private readonly string $watcher;
 
     /** @var LRUCache&\Traversable Least-recently-used cache of next ping (heartbeat) times. */
-    private readonly LRUCache&\Traversable $heartbeatTimeouts;
+    private readonly LRUCache $heartbeatTimeouts;
 
     public function __construct(
         int $queuedPingLimit = 3,

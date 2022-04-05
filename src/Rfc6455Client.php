@@ -445,7 +445,7 @@ final class Rfc6455Client implements Client
                     $bufferedLength += \strlen($chunk);
                 } while (true);
 
-                $buffer = \count($chunks) === 1 ? $chunks[0] : \implode($chunks);
+                $buffer = \implode($chunks);
                 $chunks = [$chunk];
 
                 if ($bufferedLength > $this->frameSplitThreshold) {
@@ -657,6 +657,7 @@ final class Rfc6455Client implements Client
             $opcode = Opcode::tryFrom($opcode);
             if (!$opcode) {
                 $this->onError(Code::PROTOCOL_ERROR, 'Invalid opcode');
+                return;
             }
 
             $isControlFrame = $opcode->isControlFrame();

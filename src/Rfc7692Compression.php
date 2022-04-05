@@ -147,10 +147,12 @@ final class Rfc7692Compression implements CompressionContext
         $this->receivingFlushMode = $receivingContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH;
         $this->sendingFlushMode = $sendingContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH;
 
+        /** @psalm-suppress InvalidPropertyAssignmentValue Psalm stubs are outdated */
         if (($this->inflate = \inflate_init(\ZLIB_ENCODING_RAW, ['window' => $receivingWindowSize])) === false) {
             throw new \RuntimeException('Failed initializing inflate context');
         }
 
+        /** @psalm-suppress InvalidPropertyAssignmentValue Psalm stubs are outdated */
         if (($this->deflate = \deflate_init(\ZLIB_ENCODING_RAW, ['window' => $sendingWindowSize])) === false) {
             throw new \RuntimeException('Failed initializing deflate context');
         }
@@ -172,6 +174,7 @@ final class Rfc7692Compression implements CompressionContext
             $data .= self::EMPTY_BLOCK;
         }
 
+        /** @psalm-suppress InvalidArgument Psalm stubs are outdated */
         $data = \inflate_add($this->inflate, $data, $this->receivingFlushMode);
 
         if (false === $data) {
@@ -183,6 +186,7 @@ final class Rfc7692Compression implements CompressionContext
 
     public function compress(string $data, bool $isFinal): string
     {
+        /** @psalm-suppress InvalidArgument Psalm stubs are outdated */
         $data = \deflate_add($this->deflate, $data, $this->sendingFlushMode);
         if ($data === false) {
             throw new \RuntimeException('Failed to compress data');
