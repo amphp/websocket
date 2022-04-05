@@ -47,7 +47,7 @@ class ClientTest extends AsyncTestCase
         $reason = 'Close reason';
 
         $socket = $this->createSocket();
-        $packet = compile(Opcode::CLOSE, false, true, \pack('n', $code) . $reason);
+        $packet = compile(Opcode::Close, false, true, \pack('n', $code) . $reason);
         $socket->expects($this->once())
             ->method('write')
             ->with($packet);
@@ -60,7 +60,7 @@ class ClientTest extends AsyncTestCase
                 if ($initial) {
                     $initial = false;
                     delay(0.1);
-                    return compile(Opcode::CLOSE, true, true, \pack('n', $code) . $reason);
+                    return compile(Opcode::Close, true, true, \pack('n', $code) . $reason);
                 }
 
                 return null;
@@ -94,7 +94,7 @@ class ClientTest extends AsyncTestCase
         $reason = 'Close reason';
 
         $socket = $this->createSocket();
-        $packet = compile(Opcode::CLOSE, false, true, \pack('n', $code) . $reason);
+        $packet = compile(Opcode::Close, false, true, \pack('n', $code) . $reason);
         $socket->expects($this->once())
             ->method('write')
             ->with($packet);
@@ -135,7 +135,7 @@ class ClientTest extends AsyncTestCase
     public function testPing(): void
     {
         $socket = $this->createSocket();
-        $packet = compile(Opcode::PING, false, true, '1');
+        $packet = compile(Opcode::Ping, false, true, '1');
         $socket->expects($this->atLeastOnce())
             ->method('write')
             ->withConsecutive([$packet]);
@@ -150,7 +150,7 @@ class ClientTest extends AsyncTestCase
     public function testSend(): void
     {
         $socket = $this->createSocket();
-        $packet = compile(Opcode::TEXT, false, true, 'data');
+        $packet = compile(Opcode::Text, false, true, 'data');
         $socket->expects($this->atLeastOnce())
             ->method('write')
             ->withConsecutive([$packet]);
@@ -165,10 +165,10 @@ class ClientTest extends AsyncTestCase
     public function testSendSplit(): void
     {
         $packets = [
-            compile(Opcode::TEXT, false, false, 'chunk1'),
-            compile(Opcode::CONT, false, false, 'chunk2'),
-            compile(Opcode::CONT, false, false, 'chunk3'),
-            compile(Opcode::CONT, false, true, 'end'),
+            compile(Opcode::Text, false, false, 'chunk1'),
+            compile(Opcode::Continuation, false, false, 'chunk2'),
+            compile(Opcode::Continuation, false, false, 'chunk3'),
+            compile(Opcode::Continuation, false, true, 'end'),
         ];
 
         $socket = $this->createSocket();
@@ -186,7 +186,7 @@ class ClientTest extends AsyncTestCase
     public function testSendBinary(): void
     {
         $socket = $this->createSocket();
-        $packet = compile(Opcode::BIN, false, true, 'data');
+        $packet = compile(Opcode::Binary, false, true, 'data');
         $socket->expects($this->atLeastOnce())
             ->method('write')
             ->withConsecutive([$packet]);
@@ -201,7 +201,7 @@ class ClientTest extends AsyncTestCase
     public function testStream(): void
     {
         $socket = $this->createSocket();
-        $packet = compile(Opcode::TEXT, false, true, 'chunk1chunk2chunk3');
+        $packet = compile(Opcode::Text, false, true, 'chunk1chunk2chunk3');
         $socket->expects($this->atLeastOnce())
             ->method('write')
             ->withConsecutive([$packet]);
@@ -224,8 +224,8 @@ class ClientTest extends AsyncTestCase
     public function testStreamMultipleChunks(): void
     {
         $packets = [
-            compile(Opcode::TEXT, false, false, 'chunk1chunk2'),
-            compile(Opcode::CONT, false, true, 'chunk3'),
+            compile(Opcode::Text, false, false, 'chunk1chunk2'),
+            compile(Opcode::Continuation, false, true, 'chunk3'),
         ];
 
         $socket = $this->createSocket();

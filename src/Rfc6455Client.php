@@ -172,8 +172,10 @@ final class Rfc6455Client implements Client
         }
     }
 
-    private function onData(int $opcode, string $data, bool $terminated): void
+    private function onData(Opcode $opcode, string $data, bool $terminated): void
     {
+        \assert(!$opcode->isControlFrame());
+
         // Ignore further data received after initiating close.
         if ($this->metadata->closedAt) {
             return;
@@ -184,7 +186,7 @@ final class Rfc6455Client implements Client
         $this->rateLimiter?->addToFrameCount($this, 1);
 
         if (!$this->currentMessageEmitter) {
-            if ($opcode === Opcode::CONT) {
+            if ($opcode === Opcode::Continuation) {
                 $this->onError(
                     Code::PROTOCOL_ERROR,
                     'Illegal CONTINUATION opcode; initial message payload frame must be TEXT or BINARY'
@@ -210,7 +212,7 @@ final class Rfc6455Client implements Client
             if (!$this->currentMessageEmitter) {
                 return;
             }
-        } elseif ($opcode !== Opcode::CONT) {
+        } elseif ($opcode !== Opcode::Continuation) {
             $this->onError(
                 Code::PROTOCOL_ERROR,
                 'Illegal data type opcode after unfinished previous data type frame; opcode MUST be CONTINUATION'
@@ -230,17 +232,19 @@ final class Rfc6455Client implements Client
         }
     }
 
-    private static function createMessage(int $opcode, ReadableStream $stream): Message
+    private static function createMessage(Opcode $opcode, ReadableStream $stream): Message
     {
-        if ($opcode === Opcode::BIN) {
+        if ($opcode === Opcode::Binary) {
             return Message::fromBinary($stream);
         }
 
         return Message::fromText($stream);
     }
 
-    private function onControlFrame(int $opcode, string $data): void
+    private function onControlFrame(Opcode $opcode, string $data): void
     {
+        \assert($opcode->isControlFrame());
+
         // Close already completed, so ignore any further data from the parser.
         if ($this->metadata->closedAt && $this->closeDeferred === null) {
             return;
@@ -250,7 +254,7 @@ final class Rfc6455Client implements Client
         $this->rateLimiter?->addToFrameCount($this, 1);
 
         switch ($opcode) {
-            case Opcode::CLOSE:
+            case Opcode::Close:
                 $this->closeDeferred?->complete();
                 $this->closeDeferred = null;
 
@@ -291,11 +295,11 @@ final class Rfc6455Client implements Client
                 $this->close($code, $reason);
                 break;
 
-            case Opcode::PING:
-                $this->write($data, Opcode::PONG);
+            case Opcode::Ping:
+                $this->write($data, Opcode::Pong);
                 break;
 
-            case Opcode::PONG:
+            case Opcode::Pong:
                 if (!\preg_match('/^[1-9][0-9]*$/', $data)) {
                     // Ignore pong payload that is not an integer.
                     break;
@@ -305,6 +309,10 @@ final class Rfc6455Client implements Client
                 // leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
                 $this->metadata->pongCount = \min($this->metadata->pingCount, (int) $data);
                 break;
+
+            default:
+                // This should be unreachable
+                throw new \Error('Non-control frame opcode: ' . $opcode->name);
         }
     }
 
@@ -316,32 +324,32 @@ final class Rfc6455Client implements Client
     public function send(string $data): void
     {
         \assert((bool) \preg_match('//u', $data), 'Text data must be UTF-8');
-        $this->pushData($data, Opcode::TEXT);
+        $this->pushData($data, Opcode::Text);
     }
 
     public function sendBinary(string $data): void
     {
-        $this->pushData($data, Opcode::BIN);
+        $this->pushData($data, Opcode::Binary);
     }
 
     public function stream(ReadableStream $stream): void
     {
-        $this->pushStream($stream, Opcode::TEXT);
+        $this->pushStream($stream, Opcode::Text);
     }
 
     public function streamBinary(ReadableStream $stream): void
     {
-        $this->pushStream($stream, Opcode::BIN);
+        $this->pushStream($stream, Opcode::Binary);
     }
 
     public function ping(): void
     {
         $this->metadata->lastHeartbeatAt = \time();
         ++$this->metadata->pingCount;
-        $this->write((string) $this->metadata->pingCount, Opcode::PING);
+        $this->write((string) $this->metadata->pingCount, Opcode::Ping);
     }
 
-    private function pushData(string $data, int $opcode): void
+    private function pushData(string $data, Opcode $opcode): void
     {
         if ($this->lastWrite || \strlen($data) > $this->frameSplitThreshold) {
             // Treat as a stream if another stream is pending or if splitting the data into multiple frames.
@@ -353,7 +361,7 @@ final class Rfc6455Client implements Client
         $this->sendData($data, $opcode);
     }
 
-    private function sendData(string $data, int $opcode): void
+    private function sendData(string $data, Opcode $opcode): void
     {
         ++$this->metadata->messagesSent;
         $this->metadata->lastDataSentAt = \time();
@@ -361,7 +369,7 @@ final class Rfc6455Client implements Client
         $rsv = 0;
 
         if ($this->compressionContext
-            && $opcode === Opcode::TEXT
+            && $opcode === Opcode::Text
             && \strlen($data) > $this->compressionContext->getCompressionThreshold()
         ) {
             $rsv |= $this->compressionContext->getRsv();
@@ -378,7 +386,7 @@ final class Rfc6455Client implements Client
         }
     }
 
-    private function pushStream(ReadableStream $stream, int $opcode): void
+    private function pushStream(ReadableStream $stream, Opcode $opcode): void
     {
         $this->lastWrite ??= Future::complete();
 
@@ -400,7 +408,7 @@ final class Rfc6455Client implements Client
         $this->lastWrite->await();
     }
 
-    private function sendStream(ReadableStream $stream, int $opcode): void
+    private function sendStream(ReadableStream $stream, Opcode $opcode): void
     {
         ++$this->metadata->messagesSent;
         $this->metadata->lastDataSentAt = \time();
@@ -408,7 +416,7 @@ final class Rfc6455Client implements Client
         $rsv = 0;
         $compress = false;
 
-        if ($this->compressionContext && $opcode === Opcode::TEXT) {
+        if ($this->compressionContext && $opcode === Opcode::Text) {
             $rsv |= $this->compressionContext->getRsv();
             $compress = true;
         }
@@ -454,7 +462,7 @@ final class Rfc6455Client implements Client
                         }
 
                         $this->write($split, $opcode, $rsv, false);
-                        $opcode = Opcode::CONT;
+                        $opcode = Opcode::Continuation;
                         $rsv = 0; // RSV must be 0 in continuation frames.
                     }
 
@@ -467,7 +475,7 @@ final class Rfc6455Client implements Client
                 }
 
                 $this->write($buffer, $opcode, $rsv, $chunk === null);
-                $opcode = Opcode::CONT;
+                $opcode = Opcode::Continuation;
                 $rsv = 0; // RSV must be 0 in continuation frames.
                 $bufferedLength = 0;
             } while ($chunk !== null);
@@ -482,7 +490,7 @@ final class Rfc6455Client implements Client
         }
     }
 
-    private function write(string $data, int $opcode, int $rsv = 0, bool $isFinal = true): void
+    private function write(string $data, Opcode $opcode, int $rsv = 0, bool $isFinal = true): void
     {
         $frame = $this->compile($data, $opcode, $rsv, $isFinal);
 
@@ -493,10 +501,10 @@ final class Rfc6455Client implements Client
         $this->socket->write($frame);
     }
 
-    private function compile(string $data, int $opcode, int $rsv, bool $isFinal): string
+    private function compile(string $data, Opcode $opcode, int $rsv, bool $isFinal): string
     {
         $length = \strlen($data);
-        $w = \chr(((int) $isFinal << 7) | ($rsv << 4) | $opcode);
+        $w = \chr(((int) $isFinal << 7) | ($rsv << 4) | $opcode->value);
 
         $maskFlag = $this->masked ? 0x80 : 0;
 
@@ -539,7 +547,7 @@ final class Rfc6455Client implements Client
             return;
         }
 
-        $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
+        $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::Close);
 
         if ($this->currentMessageEmitter) {
             $emitter = $this->currentMessageEmitter;
@@ -646,9 +654,14 @@ final class Rfc6455Client implements Client
                 return;
             }
 
-            $isControlFrame = $opcode >= 0x08;
+            $opcode = Opcode::tryFrom($opcode);
+            if (!$opcode) {
+                $this->onError(Code::PROTOCOL_ERROR, 'Invalid opcode');
+            }
 
-            if ($isControlFrame || $opcode === Opcode::CONT) { // Control and continuation frames
+            $isControlFrame = $opcode->isControlFrame();
+
+            if ($isControlFrame || $opcode === Opcode::Continuation) { // Control and continuation frames
                 if ($rsv !== 0) {
                     $this->onError(Code::PROTOCOL_ERROR, 'RSV must be 0 for control or continuation frames');
                     return;
@@ -659,7 +672,7 @@ final class Rfc6455Client implements Client
                     return;
                 }
 
-                $doUtf8Validation = $this->validateUtf8 && $opcode === Opcode::TEXT;
+                $doUtf8Validation = $this->validateUtf8 && $opcode === Opcode::Text;
                 $compressed = (bool) ($rsv & $compressedFlag);
             }
 
@@ -749,14 +762,6 @@ final class Rfc6455Client implements Client
                 return;
             }
 
-            if ($this->textOnly && $opcode === Opcode::BIN) {
-                $this->onError(
-                    Code::UNACCEPTABLE_TYPE,
-                    'BINARY opcodes (0x02) not accepted'
-                );
-                return;
-            }
-
             if ($isMasked) {
                 while ($bufferSize < 4) {
                     $buffer = \substr($buffer, $offset);
@@ -791,6 +796,14 @@ final class Rfc6455Client implements Client
             if ($isControlFrame) {
                 $this->onControlFrame($opcode, $payload);
                 continue;
+            }
+
+            if ($this->textOnly && $opcode === Opcode::Binary) {
+                $this->onError(
+                    Code::UNACCEPTABLE_TYPE,
+                    'BINARY opcodes (0x02) not accepted'
+                );
+                return;
             }
 
             $dataMsgBytesRecd += $frameLength;

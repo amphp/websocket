@@ -2,20 +2,17 @@
 
 namespace Amp\Websocket;
 
-final class Opcode
+enum Opcode: int
 {
-    public const CONT = 0x00;
-    public const TEXT = 0x01;
-    public const BIN = 0x02;
-    public const CLOSE = 0x08;
-    public const PING = 0x09;
-    public const PONG = 0x0A;
+    case Continuation = 0x00;
+    case Text = 0x01;
+    case Binary = 0x02;
+    case Close = 0x08;
+    case Ping = 0x09;
+    case Pong = 0x0A;
 
-    /**
-     * @codeCoverageIgnore Class cannot be instigated.
-     */
-    private function __construct()
+    public function isControlFrame(): bool
     {
-        // forbid instances
+        return $this->value >= 0x08;
     }
 }
