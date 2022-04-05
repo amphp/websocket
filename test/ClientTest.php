@@ -72,14 +72,12 @@ class ClientTest extends AsyncTestCase
 
         delay(0);
 
-        [$reportedCode, $reportedReason] = $client->close($code, $reason);
+        $client->close($code, $reason);
 
-        $this->assertFalse($client->isConnected());
+        $this->assertTrue($client->isClosed());
         $this->assertFalse($client->isClosedByPeer());
         $this->assertSame($code, $client->getCloseCode());
         $this->assertSame($reason, $client->getCloseReason());
-        $this->assertSame($code, $reportedCode);
-        $this->assertSame($reason, $reportedReason);
 
         $this->expectException(ClosedException::class);
         $this->expectExceptionMessage('Connection closed');
@@ -121,7 +119,7 @@ class ClientTest extends AsyncTestCase
 
         $client->close($code, $reason);
 
-        $this->assertFalse($client->isConnected());
+        $this->assertTrue($client->isClosed());
         $this->assertFalse($client->isClosedByPeer());
         $this->assertSame($code, $client->getCloseCode());
         $this->assertSame($reason, $client->getCloseReason());
@@ -285,7 +283,7 @@ class ClientTest extends AsyncTestCase
         $future2 = async(fn () => $client->close(Code::ABNORMAL_CLOSE, 'Second close'));
 
         try {
-            [[$code1, $reason1], [$code2, $reason2]] = Future\all([$future1, $future2]);
+            Future\await([$future1, $future2]);
         } finally {
             EventLoop::cancel($watcher);
         }
@@ -293,11 +291,5 @@ class ClientTest extends AsyncTestCase
         // First close code should be used, second is ignored.
         $this->assertSame(Code::NORMAL_CLOSE, $client->getCloseCode());
         $this->assertSame('First close', $client->getCloseReason());
-
-        $this->assertSame(Code::NORMAL_CLOSE, $code1);
-        $this->assertSame('First close', $reason1);
-
-        $this->assertSame(Code::NORMAL_CLOSE, $code2);
-        $this->assertSame('First close', $reason2);
     }
 }

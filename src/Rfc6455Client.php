@@ -32,7 +32,7 @@ final class Rfc6455Client implements Client
     /** @var Queue<string>|null */
     private ?Queue $currentMessageEmitter = null;
 
-    /** @var list<Closure(self, int, string):void>|null */
+    /** @var list<Closure(int, string):void>|null */
     private ?array $onClose = [];
 
     private ClientMetadata $metadata;
@@ -88,11 +88,6 @@ final class Rfc6455Client implements Client
     public function getUnansweredPingCount(): int
     {
         return $this->metadata->pingCount - $this->metadata->pongCount;
-    }
-
-    public function isConnected(): bool
-    {
-        return !$this->metadata->closedAt;
     }
 
     public function getLocalAddress(): SocketAddress
@@ -521,10 +516,15 @@ final class Rfc6455Client implements Client
         return $w . $data;
     }
 
-    public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): array
+    public function isClosed(): bool
+    {
+        return (bool) $this->metadata->closedAt;
+    }
+
+    public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): void
     {
         if ($this->metadata->closedAt) {
-            return [$this->metadata->closeCode, $this->metadata->closeReason];
+            return;
         }
 
         \assert($code !== Code::NONE || $reason === '');
@@ -536,7 +536,7 @@ final class Rfc6455Client implements Client
         try {
             $this->lastWrite?->await();
         } catch (\Throwable) {
-            return [$this->metadata->closeCode, $this->metadata->closeReason];
+            return;
         }
 
         $this->write($code !== Code::NONE ? \pack('n', $code) . $reason : '', Opcode::CLOSE);
@@ -576,23 +576,21 @@ final class Rfc6455Client implements Client
 
         if ($onClose !== null) {
             foreach ($onClose as $callback) {
-                EventLoop::queue(fn () => $callback($this, $code, $reason));
+                EventLoop::queue($callback, $code, $reason);
             }
         }
 
         $this->heartbeatQueue?->remove($this);
-
-        return [$this->metadata->closeCode, $this->metadata->closeReason];
     }
 
-    public function onClose(\Closure $closure): void
+    public function onClose(\Closure $onClose): void
     {
         if ($this->onClose === null) {
-            EventLoop::queue(fn () => $closure($this, $this->metadata->closeCode, $this->metadata->closeReason));
+            EventLoop::queue($onClose, $this->metadata->closeCode, $this->metadata->closeReason);
             return;
         }
 
-        $this->onClose[] = $closure;
+        $this->onClose[] = $onClose;
     }
 
     /**

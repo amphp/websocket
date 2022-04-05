@@ -4,10 +4,11 @@ namespace Amp\Websocket;
 
 use Amp\ByteStream\ReadableStream;
 use Amp\Cancellation;
+use Amp\Closable;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 
-interface Client
+interface Client extends Closable
 {
     public const DEFAULT_TEXT_ONLY = false;
     public const DEFAULT_VALIDATE_UTF8 = true;
@@ -34,12 +35,6 @@ interface Client
      * @return int Unique identifier for the client.
      */
     public function getId(): int;
-
-    /**
-     * @return bool True if the client is still connected, false otherwise. Returns false as soon as the closing
-     *     handshake is initiated by the server or client.
-     */
-    public function isConnected(): bool;
 
     /**
      * @return SocketAddress Local socket address.
@@ -134,21 +129,24 @@ interface Client
     public function getInfo(): ClientMetadata;
 
     /**
-     * Closes the client connection.
-     *
-     * @param int    $code
-     * @param string $reason
-     *
-     * @return array Returns an array containing the close code at key 0 and the close reason at key 1.
-     *               These may differ from those provided if the connection was closed prior.
+     * @return bool {@code false} if the client is still connected, {@code true} if the client has disconnected.
+     * Returns {@code true} as soon as the closing handshake is initiated by the server or client.
      */
-    public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): array;
+    public function isClosed(): bool;
 
     /**
-     * Attaches a callback invoked when the client closes. The callback is passed this object as the first parameter,
-     * the close code as the second parameter, and the close reason as the third parameter.
+     * Closes the client connection.
      *
-     * @param \Closure(Client, int, string):void $closure
+     * @param int $code
+     * @param string $reason
      */
-    public function onClose(\Closure $closure): void;
+    public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): void;
+
+    /**
+     * Attaches a callback invoked when the client closes. The callback is passed the close code as the first
+     * parameter and the close reason as the second parameter.
+     *
+     * @param \Closure(int, string):void $onClose
+     */
+    public function onClose(\Closure $onClose): void;
 }
