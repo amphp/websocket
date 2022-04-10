@@ -4,6 +4,7 @@ namespace Amp\Websocket;
 
 use cash\LRUCache;
 use Revolt\EventLoop;
+use function Amp\async;
 
 class DefaultHeartbeatQueue implements HeartbeatQueue
 {
@@ -54,11 +55,11 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
                 $heartbeatTimeouts->put($clientId, $now + $heartbeatPeriod);
 
                 if ($client->getUnansweredPingCount() > $queuedPingLimit) {
-                    $client->close(CloseCode::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
+                    async($client->close(...), CloseCode::POLICY_VIOLATION, 'Exceeded unanswered PING limit')->ignore();
                     continue;
                 }
 
-                $client->ping();
+                async($client->ping(...))->ignore();
             }
         });
     }
