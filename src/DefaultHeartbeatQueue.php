@@ -15,9 +15,13 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
     /** @var LRUCache&\Traversable Least-recently-used cache of next ping (heartbeat) times. */
     private readonly LRUCache $heartbeatTimeouts;
 
+    /**
+     * @param positive-int $queuedPingLimit
+     * @param positive-int $heartbeatPeriod
+     */
     public function __construct(
         int $queuedPingLimit = 3,
-        private int $heartbeatPeriod = 10,
+        private readonly int $heartbeatPeriod = 10,
     ) {
         $this->heartbeatTimeouts = $heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
             public function getIterator(): \Iterator

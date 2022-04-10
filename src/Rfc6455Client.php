@@ -61,7 +61,7 @@ final class Rfc6455Client implements WebsocketClient
         $this->messageEmitter = new Queue();
         $this->messageIterator = $this->messageEmitter->iterate();
 
-        $this->metadata = new WebsocketClientMetadata(\time(), $this->compressionContext !== null);
+        $this->metadata = new WebsocketClientMetadata($this->compressionContext !== null);
 
         $this->heartbeatQueue?->insert($this);
 
@@ -70,14 +70,9 @@ final class Rfc6455Client implements WebsocketClient
 
     public function receive(?Cancellation $cancellation = null): ?Message
     {
-        try {
-            if ($this->messageIterator->continue($cancellation)) {
-                return $this->messageIterator->getValue();
-            }
-            return null;
-        } catch (DisposedException) {
-            return null;
-        }
+        return $this->messageIterator->continue($cancellation)
+            ? $this->messageIterator->getValue()
+            : null;
     }
 
     public function getId(): int
@@ -272,7 +267,7 @@ final class Rfc6455Client implements WebsocketClient
                     $code = CloseCode::PROTOCOL_ERROR;
                     $reason = 'Close code must be two bytes';
                 } else {
-                    $code = \unpack('n', \substr($data, 0, 2))[1];
+                    $code = \unpack('n', $data)[1];
                     $reason = \substr($data, 2);
 
                     if ($code < 1000 // Reserved and unused.

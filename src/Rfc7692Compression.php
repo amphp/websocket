@@ -14,7 +14,7 @@ final class Rfc7692Compression implements CompressionContext
      * Create a compression context from a header received from a websocket client request.
      *
      * @param string $headerIn Header from request.
-     * @param string $headerOut Sec-Websocket-Extension response header.
+     * @param-out string|null $headerOut Sec-Websocket-Extension response header.
      *
      * @return self|null
      */
@@ -46,7 +46,7 @@ final class Rfc7692Compression implements CompressionContext
     /**
      * @param bool   $isServer True if creating a server context, false if creating a client context.
      * @param string $headerIn Header from request.
-     * @param string $headerOut Sec-Websocket-Extension response header.
+     * @param-out string|null $headerOut Sec-Websocket-Extension response header.
      *
      * @return self|null
      */

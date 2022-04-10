@@ -45,19 +45,11 @@ final class WebsocketClientMetadata
 
     public int $pongCount = 0;
 
-    public readonly bool $compressionEnabled;
-
-    /**
-     * @param int $connectedAt Current timestamp.
-     * @param bool $compressionEnabled
-     */
     public function __construct(
-        int $connectedAt,
-        bool $compressionEnabled,
+        public readonly bool $compressionEnabled,
     ) {
         $this->id = self::$nextId++;
 
-        $this->connectedAt = $connectedAt;
-        $this->compressionEnabled = $compressionEnabled;
+        $this->connectedAt = \time();
     }
 }

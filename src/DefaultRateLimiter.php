@@ -18,6 +18,10 @@ class DefaultRateLimiter implements RateLimiter
 
     private readonly string $watcher;
 
+    /**
+     * @param positive-int $bytesPerSecondLimit
+     * @param positive-int $framesPerSecondLimit
+     */
     public function __construct(
         private readonly int $bytesPerSecondLimit = 1048576, // 1MB
         private readonly int $framesPerSecondLimit = 100,
@@ -43,6 +47,8 @@ class DefaultRateLimiter implements RateLimiter
                 $rateSuspensions = [];
             }
         });
+
+        EventLoop::unreference($this->watcher);
     }
 
     public function __destruct()

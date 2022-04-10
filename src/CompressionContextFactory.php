@@ -8,7 +8,8 @@ interface CompressionContextFactory
      * Create a compression context from a header received from a websocket client request.
      *
      * @param string $headerIn Header from request.
-     * @param string $headerOut Sec-Websocket-Extension response header.
+     * @param-out string|null $headerOut Sec-Websocket-Extension response header if an instance
+     * of {@see CompressionContext} is returned, otherwise {@code null}.
      *
      * @return CompressionContext|null
      */
