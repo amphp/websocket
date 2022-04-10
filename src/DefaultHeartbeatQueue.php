@@ -7,7 +7,7 @@ use Revolt\EventLoop;
 
 class DefaultHeartbeatQueue implements HeartbeatQueue
 {
-    /** @var array<int, \WeakReference<Client>> */
+    /** @var array<int, \WeakReference<WebsocketClient>> */
     private array $clients = [];
 
     private readonly string $watcher;
@@ -40,7 +40,7 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
                     break;
                 }
 
-                /** @var Client|null $client */
+                /** @var WebsocketClient|null $client */
                 $client = ($clients[$clientId] ?? null)?->get();
                 if (!$client) {
                     $heartbeatTimeouts->remove($clientId);
@@ -50,7 +50,7 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
                 $heartbeatTimeouts->put($clientId, $now + $heartbeatPeriod);
 
                 if ($client->getUnansweredPingCount() > $queuedPingLimit) {
-                    $client->close(Code::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
+                    $client->close(CloseCode::POLICY_VIOLATION, 'Exceeded unanswered PING limit');
                     continue;
                 }
 
@@ -64,20 +64,20 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
         EventLoop::cancel($this->watcher);
     }
 
-    public function insert(Client $client): void
+    public function insert(WebsocketClient $client): void
     {
         $this->clients[$client->getId()] = \WeakReference::create($client);
         $this->update($client);
     }
 
-    public function update(Client $client): void
+    public function update(WebsocketClient $client): void
     {
         $id = $client->getId();
         \assert(isset($this->clients[$id]));
         $this->heartbeatTimeouts->put($id, \time() + $this->heartbeatPeriod);
     }
 
-    public function remove(Client $client): void
+    public function remove(WebsocketClient $client): void
     {
         $id = $client->getId();
         $this->heartbeatTimeouts->remove($id);

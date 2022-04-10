@@ -12,8 +12,8 @@ final class ClosedException extends \Exception
             '%s; Code %s (%s); Reason: "%s"',
             $message,
             $code,
-            Code::getName($code) ?? 'Unknown code',
-            $reason
+            CloseCode::getName($code) ?? 'Unknown code',
+            $reason,
         ), $code, $previous);
 
         $this->reason = $reason;

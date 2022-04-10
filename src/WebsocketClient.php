@@ -8,7 +8,7 @@ use Amp\Closable;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 
-interface Client extends Closable
+interface WebsocketClient extends Closable
 {
     public const DEFAULT_TEXT_ONLY = false;
     public const DEFAULT_VALIDATE_UTF8 = true;
@@ -124,9 +124,9 @@ interface Client extends Closable
     /**
      * Returns connection metadata.
      *
-     * @return ClientMetadata
+     * @return WebsocketClientMetadata
      */
-    public function getInfo(): ClientMetadata;
+    public function getInfo(): WebsocketClientMetadata;
 
     /**
      * @return bool {@code false} if the client is still connected, {@code true} if the client has disconnected.
@@ -140,13 +140,13 @@ interface Client extends Closable
      * @param int $code
      * @param string $reason
      */
-    public function close(int $code = Code::NORMAL_CLOSE, string $reason = ''): void;
+    public function close(int $code = CloseCode::NORMAL_CLOSE, string $reason = ''): void;
 
     /**
      * Attaches a callback invoked when the client closes. The callback is passed the close code as the first
      * parameter and the close reason as the second parameter.
      *
-     * @param \Closure(ClientMetadata):void $onClose
+     * @param \Closure(WebsocketClientMetadata):void $onClose
      */
     public function onClose(\Closure $onClose): void;
 }

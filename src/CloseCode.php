@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-final class Code
+final class CloseCode
 {
     public const NORMAL_CLOSE = 1000;
     public const GOING_AWAY = 1001;

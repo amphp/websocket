@@ -7,15 +7,15 @@ interface HeartbeatQueue
     /**
      * Insert the given client into the heartbeat queue.
      */
-    public function insert(Client $client): void;
+    public function insert(WebsocketClient $client): void;
 
     /**
      * Update the heartbeat interval for the given client.
      */
-    public function update(Client $client): void;
+    public function update(WebsocketClient $client): void;
 
     /**
      * Remove the given client from the heartbeat queue.
      */
-    public function remove(Client $client): void;
+    public function remove(WebsocketClient $client): void;
 }

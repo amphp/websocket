@@ -10,7 +10,7 @@ use Amp\Pipeline\Queue;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Websocket\ClosedException;
-use Amp\Websocket\Code;
+use Amp\Websocket\CloseCode;
 use Amp\Websocket\Opcode;
 use Amp\Websocket\Rfc6455Client;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -18,7 +18,7 @@ use Revolt\EventLoop;
 use function Amp\async;
 use function Amp\delay;
 
-class ClientTest extends AsyncTestCase
+class WebsocketClientTest extends AsyncTestCase
 {
     /**
      * @return Socket&MockObject
@@ -43,7 +43,7 @@ class ClientTest extends AsyncTestCase
 
     public function testClose(): void
     {
-        $code = Code::PROTOCOL_ERROR;
+        $code = CloseCode::PROTOCOL_ERROR;
         $reason = 'Close reason';
 
         $socket = $this->createSocket();
@@ -90,7 +90,7 @@ class ClientTest extends AsyncTestCase
         $this->setMinimumRuntime(1);
         $this->setTimeout(1.1);
 
-        $code = Code::NORMAL_CLOSE;
+        $code = CloseCode::NORMAL_CLOSE;
         $reason = 'Close reason';
 
         $socket = $this->createSocket();
@@ -279,8 +279,8 @@ class ClientTest extends AsyncTestCase
 
         $client->onClose($this->createCallback(1));
 
-        $future1 = async(fn () => $client->close(Code::NORMAL_CLOSE, 'First close'));
-        $future2 = async(fn () => $client->close(Code::ABNORMAL_CLOSE, 'Second close'));
+        $future1 = async(fn () => $client->close(CloseCode::NORMAL_CLOSE, 'First close'));
+        $future2 = async(fn () => $client->close(CloseCode::ABNORMAL_CLOSE, 'Second close'));
 
         try {
             Future\await([$future1, $future2]);
@@ -289,7 +289,7 @@ class ClientTest extends AsyncTestCase
         }
 
         // First close code should be used, second is ignored.
-        $this->assertSame(Code::NORMAL_CLOSE, $client->getCloseCode());
+        $this->assertSame(CloseCode::NORMAL_CLOSE, $client->getCloseCode());
         $this->assertSame('First close', $client->getCloseReason());
     }
 }

@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-final class ClientMetadata
+final class WebsocketClientMetadata
 {
     /** @var int Next sequential client ID. */
     private static int $nextId = 0;
