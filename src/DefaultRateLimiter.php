@@ -4,6 +4,7 @@ namespace Amp\Websocket;
 
 use Revolt\EventLoop;
 use Revolt\EventLoop\Suspension;
+use function Amp\weakClosure;
 
 class DefaultRateLimiter implements RateLimiter
 {
@@ -26,27 +27,20 @@ class DefaultRateLimiter implements RateLimiter
         private readonly int $bytesPerSecondLimit = 1048576, // 1MB
         private readonly int $framesPerSecondLimit = 100,
     ) {
-        $rateSuspensions = &$this->rateSuspensions;
-        $bytesReadInLastSecond = &$this->bytesReadInLastSecond;
-        $framesReadInLastSecond = &$this->framesReadInLastSecond;
-        $this->watcher = EventLoop::repeat(1, static function (string $watcher) use (
-            &$rateSuspensions,
-            &$bytesReadInLastSecond,
-            &$framesReadInLastSecond,
-        ): void {
-            $bytesReadInLastSecond = [];
-            $framesReadInLastSecond = [];
+        $this->watcher = EventLoop::repeat(1, weakClosure(function (string $watcher): void {
+            $this->bytesReadInLastSecond = [];
+            $this->framesReadInLastSecond = [];
 
-            if (!empty($rateSuspensions)) {
+            if (!empty($this->rateSuspensions)) {
                 EventLoop::unreference($watcher);
 
-                foreach ($rateSuspensions as $suspension) {
+                foreach ($this->rateSuspensions as $suspension) {
                     $suspension->resume();
                 }
 
-                $rateSuspensions = [];
+                $this->rateSuspensions = [];
             }
-        });
+        }));
 
         EventLoop::unreference($this->watcher);
     }

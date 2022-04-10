@@ -5,6 +5,7 @@ namespace Amp\Websocket;
 use cash\LRUCache;
 use Revolt\EventLoop;
 use function Amp\async;
+use function Amp\weakClosure;
 
 class DefaultHeartbeatQueue implements HeartbeatQueue
 {
@@ -24,35 +25,29 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
         int $queuedPingLimit = 3,
         private readonly int $heartbeatPeriod = 10,
     ) {
-        $this->heartbeatTimeouts = $heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
+        $this->heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
             public function getIterator(): \Iterator
             {
                 yield from $this->data;
             }
         };
 
-        $clients = &$this->clients;
-        $this->watcher = EventLoop::repeat(1, static function (string $watcher) use (
-            &$clients,
-            $heartbeatTimeouts,
-            $queuedPingLimit,
-            $heartbeatPeriod,
-        ): void {
+        $this->watcher = EventLoop::repeat(1, weakClosure(function () use ($queuedPingLimit): void {
             $now = \time();
 
-            foreach ($heartbeatTimeouts as $clientId => $expiryTime) {
+            foreach ($this->heartbeatTimeouts as $clientId => $expiryTime) {
                 if ($expiryTime >= $now) {
                     break;
                 }
 
                 /** @var WebsocketClient|null $client */
-                $client = ($clients[$clientId] ?? null)?->get();
+                $client = ($this->clients[$clientId] ?? null)?->get();
                 if (!$client) {
-                    $heartbeatTimeouts->remove($clientId);
+                    $this->heartbeatTimeouts->remove($clientId);
                     continue;
                 }
 
-                $heartbeatTimeouts->put($clientId, $now + $heartbeatPeriod);
+                $this->heartbeatTimeouts->put($clientId, $now + $this->heartbeatPeriod);
 
                 if ($client->getUnansweredPingCount() > $queuedPingLimit) {
                     async($client->close(...), CloseCode::POLICY_VIOLATION, 'Exceeded unanswered PING limit')->ignore();
@@ -61,7 +56,9 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
 
                 async($client->ping(...))->ignore();
             }
-        });
+        }));
+
+        EventLoop::unreference($this->watcher);
     }
 
     public function __destruct()
