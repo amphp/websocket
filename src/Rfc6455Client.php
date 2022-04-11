@@ -271,7 +271,8 @@ final class Rfc6455Client implements Client
                 $chunk = ''; // Free memory from last chunk read.
 
                 if ((self::$framesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxFramesPerSecond
-                    || self::$bytesReadInLastSecond[$this->metadata->id] >= $maxBytesPerSecond) {
+                    || (self::$bytesReadInLastSecond[$this->metadata->id] ?? 0) >= $maxBytesPerSecond
+                ) {
                     /** @psalm-suppress PossiblyNullArgument */
                     Loop::reference(self::$watcher); // Reference watcher to keep loop running until rate limit released.
                     self::$rateDeferreds[$this->metadata->id] = $deferred = new Deferred;
