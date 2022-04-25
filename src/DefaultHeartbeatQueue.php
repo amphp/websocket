@@ -25,6 +25,16 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
         int $queuedPingLimit = 3,
         private readonly int $heartbeatPeriod = 10,
     ) {
+        /** @psalm-suppress TypeDoesNotContainType */
+        if ($queuedPingLimit <= 0) {
+            throw new \ValueError('Queued ping limit must be greater than 0');
+        }
+
+        /** @psalm-suppress TypeDoesNotContainType */
+        if ($this->heartbeatPeriod <= 0) {
+            throw new \ValueError('Heartbeat period must be greater than 0');
+        }
+
         $this->heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
             public function getIterator(): \Iterator
             {

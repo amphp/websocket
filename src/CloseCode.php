@@ -48,7 +48,7 @@ final class CloseCode
     }
 
     /**
-     * @codeCoverageIgnore Class cannot be instigated.
+     * @codeCoverageIgnore Class cannot be instantiated.
      */
     private function __construct()
     {

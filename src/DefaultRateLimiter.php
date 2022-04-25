@@ -27,6 +27,16 @@ class DefaultRateLimiter implements RateLimiter
         private readonly int $bytesPerSecondLimit = 1048576, // 1MB
         private readonly int $framesPerSecondLimit = 100,
     ) {
+        /** @psalm-suppress TypeDoesNotContainType */
+        if ($this->bytesPerSecondLimit <= 0) {
+            throw new \ValueError('Bytes-per-second limit must be greater than 0');
+        }
+
+        /** @psalm-suppress TypeDoesNotContainType */
+        if ($this->framesPerSecondLimit <= 0) {
+            throw new \ValueError('Frames-per-second limit must be greater than 0');
+        }
+
         $this->watcher = EventLoop::repeat(1, weakClosure(function (string $watcher): void {
             $this->bytesReadInLastSecond = [];
             $this->framesReadInLastSecond = [];
