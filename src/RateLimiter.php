@@ -2,22 +2,21 @@
 
 namespace Amp\Websocket;
 
-use Revolt\EventLoop\Suspension;
-
 interface RateLimiter
 {
     /**
-     * Add the number of bytes to the current total for the given client.
+     * Notify the rate limiter of bytes received by the client. The rate limiter may suspend if it wishes to
+     * prevent processing data and receiving further data.
+     *
+     * @param positive-int $bytes
      */
-    public function addToByteCount(WebsocketClient $client, int $bytes): void;
+    public function notifyBytesReceived(WebsocketClient $client, int $bytes): void;
 
     /**
-     * Add the number of frames to the current total for the given client.
+     * Notify the rate limiter of frames received by the client. The rate limiter may suspend if it wishes to
+     * prevent processing data and receiving further data.
+     *
+     * @param positive-int $frames
      */
-    public function addToFrameCount(WebsocketClient $client, int $frames): void;
-
-    /**
-     * Get the {@see Suspension} for the given client if the rate limiter wishes to pause reading data on the client.
-     */
-    public function getSuspension(WebsocketClient $client): ?Suspension;
+    public function notifyFramesReceived(WebsocketClient $client, int $frames): void;
 }

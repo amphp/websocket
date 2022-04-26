@@ -65,7 +65,7 @@ final class Rfc6455Client implements WebsocketClient
 
         $this->heartbeatQueue?->insert($this);
 
-        EventLoop::queue(fn () => $this->read());
+        EventLoop::queue($this->read(...));
     }
 
     public function receive(?Cancellation $cancellation = null): ?Message
@@ -145,19 +145,18 @@ final class Rfc6455Client implements WebsocketClient
                 $this->metadata->lastReadAt = \time();
                 $this->metadata->bytesRead += \strlen($chunk);
 
-                $this->rateLimiter?->addToByteCount($this, \strlen($chunk));
                 $this->heartbeatQueue?->update($this);
+                $this->rateLimiter?->notifyBytesReceived($this, \strlen($chunk));
 
                 $parser->send($chunk);
 
                 $chunk = ''; // Free memory from last chunk read.
-
-                $this->rateLimiter?->getSuspension($this)?->suspend();
             }
         } catch (\Throwable $exception) {
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
         }
 
+        /** @psalm-suppress PossiblyUndefinedVariable Seems to be a bug in Psalm causing this */
         $this->closeDeferred?->complete();
         $this->closeDeferred = null;
 
@@ -178,7 +177,7 @@ final class Rfc6455Client implements WebsocketClient
 
         $this->metadata->lastDataReadAt = \time();
         ++$this->metadata->framesRead;
-        $this->rateLimiter?->addToFrameCount($this, 1);
+        $this->rateLimiter?->notifyFramesReceived($this, 1);
 
         if (!$this->currentMessageEmitter) {
             if ($opcode === Opcode::Continuation) {
@@ -246,7 +245,7 @@ final class Rfc6455Client implements WebsocketClient
         }
 
         ++$this->metadata->framesRead;
-        $this->rateLimiter?->addToFrameCount($this, 1);
+        $this->rateLimiter?->notifyFramesReceived($this, 1);
 
         switch ($opcode) {
             case Opcode::Close:

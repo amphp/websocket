@@ -60,30 +60,27 @@ class DefaultRateLimiter implements RateLimiter
         EventLoop::cancel($this->watcher);
     }
 
-    public function addToByteCount(WebsocketClient $client, int $bytes): void
+    public function notifyBytesReceived(WebsocketClient $client, int $bytes): void
     {
         $id = $client->getId();
         $count = $this->bytesReadInLastSecond[$id] = ($this->bytesReadInLastSecond[$id] ?? 0) + $bytes;
 
         if ($count >= $this->bytesPerSecondLimit) {
-            $this->rateSuspensions[$id] ??= EventLoop::getSuspension();
+            $suspension = $this->rateSuspensions[$id] ??= EventLoop::getSuspension();
             EventLoop::reference($this->watcher);
+            $suspension->suspend();
         }
     }
 
-    public function addToFrameCount(WebsocketClient $client, int $frames): void
+    public function notifyFramesReceived(WebsocketClient $client, int $frames): void
     {
         $id = $client->getId();
         $count = $this->framesReadInLastSecond[$id] = ($this->framesReadInLastSecond[$id] ?? 0) + $frames;
 
         if ($count >= $this->framesPerSecondLimit) {
-            $this->rateSuspensions[$id] ??= EventLoop::getSuspension();
+            $suspension = $this->rateSuspensions[$id] ??= EventLoop::getSuspension();
             EventLoop::reference($this->watcher);
+            $suspension->suspend();
         }
-    }
-
-    public function getSuspension(WebsocketClient $client): ?Suspension
-    {
-        return $this->rateSuspensions[$client->getId()] ?? null;
     }
 }
