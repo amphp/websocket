@@ -17,6 +17,9 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
     /** @var LRUCache&\Traversable Least-recently-used cache of next ping (heartbeat) times. */
     private readonly LRUCache $heartbeatTimeouts;
 
+    /** @var int Cached current time to avoid syscall on each update. */
+    private int $now;
+
     /**
      * @param positive-int $queuedPingLimit
      * @param positive-int $heartbeatPeriod
@@ -35,6 +38,8 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
             throw new \ValueError('Heartbeat period must be greater than 0');
         }
 
+        $this->now = \time();
+
         $this->heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
             public function getIterator(): \Iterator
             {
@@ -43,10 +48,10 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
         };
 
         $this->watcher = EventLoop::repeat(1, weakClosure(function () use ($queuedPingLimit): void {
-            $now = \time();
+            $this->now = \time();
 
             foreach ($this->heartbeatTimeouts as $clientId => $expiryTime) {
-                if ($expiryTime >= $now) {
+                if ($expiryTime >= $this->now) {
                     break;
                 }
 
@@ -57,7 +62,7 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
                     continue;
                 }
 
-                $this->heartbeatTimeouts->put($clientId, $now + $this->heartbeatPeriod);
+                $this->heartbeatTimeouts->put($clientId, $this->now + $this->heartbeatPeriod);
 
                 if ($client->getUnansweredPingCount() > $queuedPingLimit) {
                     async($client->close(...), CloseCode::POLICY_VIOLATION, 'Exceeded unanswered PING limit')->ignore();
@@ -86,7 +91,7 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
     {
         $id = $client->getId();
         \assert(isset($this->clients[$id]));
-        $this->heartbeatTimeouts->put($id, \time() + $this->heartbeatPeriod);
+        $this->heartbeatTimeouts->put($id, $this->now + $this->heartbeatPeriod);
     }
 
     public function remove(WebsocketClient $client): void
