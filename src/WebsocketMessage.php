@@ -11,7 +11,7 @@ use Amp\Cancellation;
 /**
  * This class allows streamed and buffered access to the websocket message.
  */
-final class Message implements ReadableStream
+final class WebsocketMessage implements ReadableStream
 {
     private readonly Payload $stream;
 
@@ -50,7 +50,7 @@ final class Message implements ReadableStream
     /**
      * @return bool True if the message is UTF-8 text, false if it is binary.
      *
-     * @see Message::isBinary()
+     * @see WebsocketMessage::isBinary()
      */
     public function isText(): bool
     {
@@ -60,7 +60,7 @@ final class Message implements ReadableStream
     /**
      * @return bool True if the message is binary, false if it is UTF-8 text.
      *
-     * @see Message::isText()
+     * @see WebsocketMessage::isText()
      */
     public function isBinary(): bool
     {

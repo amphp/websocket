@@ -23,10 +23,10 @@ final class Rfc6455Client implements WebsocketClient
 {
     private ?Future $lastWrite = null;
 
-    /** @var Queue<Message> */
+    /** @var Queue<WebsocketMessage> */
     private Queue $messageEmitter;
 
-    /** @var ConcurrentIterator<Message> */
+    /** @var ConcurrentIterator<WebsocketMessage> */
     private ConcurrentIterator $messageIterator;
 
     /** @var Queue<string>|null */
@@ -68,7 +68,7 @@ final class Rfc6455Client implements WebsocketClient
         EventLoop::queue($this->read(...));
     }
 
-    public function receive(?Cancellation $cancellation = null): ?Message
+    public function receive(?Cancellation $cancellation = null): ?WebsocketMessage
     {
         return $this->messageIterator->continue($cancellation)
             ? $this->messageIterator->getValue()
@@ -226,13 +226,13 @@ final class Rfc6455Client implements WebsocketClient
         }
     }
 
-    private static function createMessage(Opcode $opcode, ReadableStream $stream): Message
+    private static function createMessage(Opcode $opcode, ReadableStream $stream): WebsocketMessage
     {
         if ($opcode === Opcode::Binary) {
-            return Message::fromBinary($stream);
+            return WebsocketMessage::fromBinary($stream);
         }
 
-        return Message::fromText($stream);
+        return WebsocketMessage::fromText($stream);
     }
 
     private function onControlFrame(Opcode $opcode, string $data): void
