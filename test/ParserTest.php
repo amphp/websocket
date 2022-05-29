@@ -4,8 +4,8 @@ namespace Amp\Websocket\Test;
 
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket\Socket;
-use Amp\Websocket\ClosedException;
 use Amp\Websocket\CloseCode;
+use Amp\Websocket\ClosedException;
 use Amp\Websocket\Opcode;
 use Amp\Websocket\Rfc6455Client;
 use function Amp\delay;
