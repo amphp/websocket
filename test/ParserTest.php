@@ -156,7 +156,6 @@ class ParserTest extends AsyncTestCase
         $input = compile(Opcode::Binary, true, true, \str_repeat("*", 65536)) | ("\x00\x00\x80" . \str_repeat("\x00", 0xFF));
         $return[] = [$input, null, true, "Most significant bit of 64-bit length field set", CloseCode::PROTOCOL_ERROR];
 
-
         // 39 ---- utf-8 must be accepted for interrupted text with interleaved control frame ----->
 
         $data = "H" . \str_repeat("ö", 32770);

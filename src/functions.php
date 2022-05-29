@@ -8,8 +8,6 @@ const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 /**
  * @param positive-int $length Random bytes to use to generate the key.
  *
- * @return string
- *
  * @throws \Exception If generating a random key fails.
  */
 function generateKey(int $length = 16): string
@@ -19,10 +17,6 @@ function generateKey(int $length = 16): string
 
 /**
  * Generates the value for the Sec-Websocket-Accept header based on the given Sec-Websocket-Key header value.
- *
- * @param string $key
- *
- * @return string
  */
 function generateAcceptFromKey(string $key): string
 {
@@ -31,11 +25,6 @@ function generateAcceptFromKey(string $key): string
 
 /**
  * Determines if the Sec-Websocket-Accept value given matches the expected value for the Sec-Websocket-Key header.
- *
- * @param string $accept
- * @param string $key
- *
- * @return bool
  */
 function validateAcceptForKey(string $accept, string $key): bool
 {

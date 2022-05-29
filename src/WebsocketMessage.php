@@ -21,8 +21,6 @@ final class WebsocketMessage implements ReadableStream
      * Create a Message from a UTF-8 text stream.
      *
      * @param ReadableStream $stream UTF-8 text stream.
-     *
-     * @return self
      */
     public static function fromText(ReadableStream $stream): self
     {
@@ -33,8 +31,6 @@ final class WebsocketMessage implements ReadableStream
      * Create a Message from a binary stream.
      *
      * @param ReadableStream $stream Binary stream.
-     *
-     * @return self
      */
     public static function fromBinary(ReadableStream $stream): self
     {

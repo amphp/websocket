@@ -15,8 +15,6 @@ final class Rfc7692Compression implements CompressionContext
      *
      * @param string $headerIn Header from request.
      * @param-out string|null $headerOut Sec-Websocket-Extension response header.
-     *
-     * @return self|null
      */
     public static function fromClientHeader(string $headerIn, ?string &$headerOut): ?self
     {
@@ -27,8 +25,6 @@ final class Rfc7692Compression implements CompressionContext
      * Create a compression context from a header received from a websocket server response.
      *
      * @param string $header Header from response.
-     *
-     * @return self|null
      */
     public static function fromServerHeader(string $header): ?self
     {
@@ -47,8 +43,6 @@ final class Rfc7692Compression implements CompressionContext
      * @param bool   $isServer True if creating a server context, false if creating a client context.
      * @param string $headerIn Header from request.
      * @param-out string|null $headerOut Sec-Websocket-Extension response header.
-     *
-     * @return self|null
      */
     private static function fromHeader(bool $isServer, string $headerIn, ?string &$headerOut = null): ?self
     {

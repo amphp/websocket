@@ -100,8 +100,6 @@ interface WebsocketClient extends Closable
      * Streams the given UTF-8 text stream to the endpoint. This method should be used only for large payloads such as
      * files. Use send() for smaller payloads.
      *
-     * @param ReadableStream $stream
-     *
      * @throws ClosedException Thrown if sending to the client fails.
      */
     public function stream(ReadableStream $stream): void;
@@ -109,8 +107,6 @@ interface WebsocketClient extends Closable
     /**
      * Streams the given binary to the endpoint. This method should be used only for large payloads such as
      * files. Use sendBinary() for smaller payloads.
-     *
-     * @param ReadableStream $stream
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
@@ -123,8 +119,6 @@ interface WebsocketClient extends Closable
 
     /**
      * Returns connection metadata.
-     *
-     * @return WebsocketClientMetadata
      */
     public function getInfo(): WebsocketClientMetadata;
 
@@ -136,9 +130,6 @@ interface WebsocketClient extends Closable
 
     /**
      * Closes the client connection.
-     *
-     * @param int $code
-     * @param string $reason
      */
     public function close(int $code = CloseCode::NORMAL_CLOSE, string $reason = ''): void;
 

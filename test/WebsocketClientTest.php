@@ -131,7 +131,6 @@ class WebsocketClientTest extends AsyncTestCase
         $this->assertNull($future->await());
     }
 
-
     public function testPing(): void
     {
         $socket = $this->createSocket();

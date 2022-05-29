@@ -597,8 +597,6 @@ final class Rfc6455Client implements WebsocketClient
 
     /**
      * A stateful generator websocket frame parser.
-     *
-     * @return \Generator
      */
     private function parser(): \Generator
     {
