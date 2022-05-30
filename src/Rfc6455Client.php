@@ -52,7 +52,6 @@ final class Rfc6455Client implements WebsocketClient
         private readonly bool $validateUtf8 = self::DEFAULT_VALIDATE_UTF8,
         private readonly int $messageSizeLimit = self::DEFAULT_MESSAGE_SIZE_LIMIT,
         private readonly int $frameSizeLimit = self::DEFAULT_FRAME_SIZE_LIMIT,
-        private readonly int $streamThreshold = self::DEFAULT_STREAM_THRESHOLD,
         private readonly int $frameSplitThreshold = self::DEFAULT_FRAME_SPLIT_THRESHOLD,
         private readonly float $closePeriod = self::DEFAULT_CLOSE_PERIOD,
     ) {
@@ -423,24 +422,16 @@ final class Rfc6455Client implements WebsocketClient
                 return;
             }
 
-            $chunks = [$chunk];
-            $bufferedLength = \strlen($chunk);
-
             do {
-                do {
-                    // Perform another read to avoid sending an empty frame on stream end.
-                    $chunk = $stream->read();
+                $buffer = $chunk;
 
-                    if ($chunk === null || $bufferedLength >= $this->streamThreshold) {
-                        break;
-                    }
+                // Perform another read to avoid sending an empty frame on stream end.
+                $chunk = $stream->read();
 
-                    $chunks[] = $chunk;
-                    $bufferedLength += \strlen($chunk);
-                } while (true);
-
-                $buffer = \implode($chunks);
-                $chunks = [$chunk];
+                $bufferedLength = \strlen($buffer);
+                if ($bufferedLength === 0) {
+                    continue;
+                }
 
                 if ($bufferedLength > $this->frameSplitThreshold) {
                     $splitLength = $bufferedLength;
@@ -471,7 +462,6 @@ final class Rfc6455Client implements WebsocketClient
                 $this->write($buffer, $opcode, $rsv, $chunk === null);
                 $opcode = Opcode::Continuation;
                 $rsv = 0; // RSV must be 0 in continuation frames.
-                $bufferedLength = 0;
             } while ($chunk !== null);
         } catch (StreamException $exception) {
             $code = CloseCode::ABNORMAL_CLOSE;

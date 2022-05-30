@@ -199,11 +199,16 @@ class WebsocketClientTest extends AsyncTestCase
 
     public function testStream(): void
     {
+        $packets = \array_map(fn (string $packet) => [$packet], [
+            compile(Opcode::Text, false, false, 'chunk1'),
+            compile(Opcode::Continuation, false, false, 'chunk2'),
+            compile(Opcode::Continuation, false, true, 'chunk3'),
+        ]);
+
         $socket = $this->createSocket();
-        $packet = compile(Opcode::Text, false, true, 'chunk1chunk2chunk3');
         $socket->expects($this->atLeastOnce())
             ->method('write')
-            ->withConsecutive([$packet]);
+            ->withConsecutive(...$packets);
 
         $client = new Rfc6455Client($socket, masked: false);
 
@@ -223,8 +228,10 @@ class WebsocketClientTest extends AsyncTestCase
     public function testStreamMultipleChunks(): void
     {
         $packets = [
-            compile(Opcode::Text, false, false, 'chunk1chunk2'),
-            compile(Opcode::Continuation, false, true, 'chunk3'),
+            compile(Opcode::Text, false, false, 'chunk1'),
+            compile(Opcode::Continuation, false, false, 'chunk2'),
+            compile(Opcode::Continuation, false, false, 'chunk'),
+            compile(Opcode::Continuation, false, true, '3'),
         ];
 
         $socket = $this->createSocket();
@@ -234,7 +241,7 @@ class WebsocketClientTest extends AsyncTestCase
                 return [$packet];
             }, $packets));
 
-        $client = new Rfc6455Client($socket, masked: false, streamThreshold: 10);
+        $client = new Rfc6455Client($socket, masked: false);
 
         $emitter = new Queue();
         $emitter->pushAsync('chunk1');

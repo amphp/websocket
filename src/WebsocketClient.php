@@ -14,7 +14,6 @@ interface WebsocketClient extends Closable
     public const DEFAULT_VALIDATE_UTF8 = true;
     public const DEFAULT_MESSAGE_SIZE_LIMIT = 10485760; // 10MB
     public const DEFAULT_FRAME_SIZE_LIMIT = 2097152; // 2MB
-    public const DEFAULT_STREAM_THRESHOLD = 4096; // 4KB
     public const DEFAULT_FRAME_SPLIT_THRESHOLD = 32768; // 32KB
     public const DEFAULT_CLOSE_PERIOD = 3;
 
