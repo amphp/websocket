@@ -20,9 +20,9 @@ final class WebsocketMessage implements ReadableStream
     /**
      * Create a Message from a UTF-8 text stream.
      *
-     * @param ReadableStream $stream UTF-8 text stream.
+     * @param ReadableStream|string $stream UTF-8 text stream or string.
      */
-    public static function fromText(ReadableStream $stream): self
+    public static function fromText(ReadableStream|string $stream): self
     {
         return new self($stream, false);
     }
@@ -30,14 +30,14 @@ final class WebsocketMessage implements ReadableStream
     /**
      * Create a Message from a binary stream.
      *
-     * @param ReadableStream $stream Binary stream.
+     * @param ReadableStream|string $stream Binary stream or string.
      */
-    public static function fromBinary(ReadableStream $stream): self
+    public static function fromBinary(ReadableStream|string $stream): self
     {
         return new self($stream, true);
     }
 
-    private function __construct(ReadableStream $stream, bool $binary)
+    private function __construct(ReadableStream|string $stream, bool $binary)
     {
         $this->stream = new Payload($stream);
         $this->binary = $binary;
@@ -69,12 +69,17 @@ final class WebsocketMessage implements ReadableStream
      */
     public function read(?Cancellation $cancellation = null): ?string
     {
-        return $this->stream->read($cancellation);
+        try {
+            return $this->stream->read($cancellation);
+        } catch (StreamException $exception) {
+            $previous = $exception->getPrevious();
+            throw $previous instanceof ClosedException ? $previous : $exception;
+        }
     }
 
     /**
      * Buffer the entire message contents. Note that the given size limit may not be reached if a smaller message size
-     * limit has been imposed by {@see Options::getMessageSizeLimit()}.
+     * limit has been imposed by {@see Rfc6455Client::$messageSizeLimit}.
      *
      * @see Payload::buffer()
      *
@@ -83,7 +88,12 @@ final class WebsocketMessage implements ReadableStream
      */
     public function buffer(?Cancellation $cancellation = null, int $limit = \PHP_INT_MAX): string
     {
-        return $this->stream->buffer($cancellation, $limit);
+        try {
+            return $this->stream->buffer($cancellation, $limit);
+        } catch (StreamException $exception) {
+            $previous = $exception->getPrevious();
+            throw $previous instanceof ClosedException ? $previous : $exception;
+        }
     }
 
     public function isReadable(): bool

@@ -200,7 +200,7 @@ final class Rfc6455Client implements WebsocketClient
                 $opcode,
                 $this->currentMessageEmitter
                     ? new ReadableIterableStream($this->currentMessageEmitter->pipe())
-                    : new ReadableBuffer($data),
+                    : $data,
             ));
 
             if (!$this->currentMessageEmitter) {
@@ -226,7 +226,7 @@ final class Rfc6455Client implements WebsocketClient
         }
     }
 
-    private static function createMessage(Opcode $opcode, ReadableStream $stream): WebsocketMessage
+    private static function createMessage(Opcode $opcode, ReadableStream|string $stream): WebsocketMessage
     {
         if ($opcode === Opcode::Binary) {
             return WebsocketMessage::fromBinary($stream);
