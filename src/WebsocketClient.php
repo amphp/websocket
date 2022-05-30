@@ -24,9 +24,7 @@ interface WebsocketClient extends Closable
      * connection or discard the next message. A subsequent call to this method will still return the next message
      * received from the client.
      *
-     * @return WebsocketMessage|null Returns the message sent by the remote or null if the connection closes normally.
-     *
-     * @throws ClosedException Thrown if the connection is closed abnormally.
+     * @return WebsocketMessage|null Returns the message sent by the remote or null if the connection closes.
      */
     public function receive(?Cancellation $cancellation = null): ?WebsocketMessage;
 

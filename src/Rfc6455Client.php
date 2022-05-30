@@ -24,10 +24,10 @@ final class Rfc6455Client implements WebsocketClient
     private ?Future $lastWrite = null;
 
     /** @var Queue<WebsocketMessage> */
-    private Queue $messageEmitter;
+    private readonly Queue $messageEmitter;
 
     /** @var ConcurrentIterator<WebsocketMessage> */
-    private ConcurrentIterator $messageIterator;
+    private readonly ConcurrentIterator $messageIterator;
 
     /** @var Queue<string>|null */
     private ?Queue $currentMessageEmitter = null;
@@ -35,7 +35,7 @@ final class Rfc6455Client implements WebsocketClient
     /** @var list<Closure(WebsocketClientMetadata):void>|null */
     private ?array $onClose = [];
 
-    private WebsocketClientMetadata $metadata;
+    private readonly WebsocketClientMetadata $metadata;
 
     private ?DeferredFuture $closeDeferred;
 
@@ -546,14 +546,7 @@ final class Rfc6455Client implements WebsocketClient
             ));
         }
 
-        match ($code) {
-            CloseCode::NORMAL_CLOSE, CloseCode::GOING_AWAY, CloseCode::NONE, => $this->messageEmitter->complete(),
-            default => $this->messageEmitter->error(new ClosedException(
-                'Connection closed abnormally while awaiting message',
-                $code,
-                $reason
-            )),
-        };
+        $this->messageEmitter->complete();
 
         try {
             // Wait for peer close frame for configured number of seconds.

@@ -10,7 +10,6 @@ use Amp\Pipeline\Queue;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Websocket\CloseCode;
-use Amp\Websocket\ClosedException;
 use Amp\Websocket\Opcode;
 use Amp\Websocket\Rfc6455Client;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -68,7 +67,7 @@ class WebsocketClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, masked: false);
 
-        $future = async(fn () => $client->receive()); // Promise should fail due to abnormal close.
+        $future = async(fn () => $client->receive());
 
         delay(0);
 
@@ -79,10 +78,7 @@ class WebsocketClientTest extends AsyncTestCase
         $this->assertSame($code, $client->getCloseCode());
         $this->assertSame($reason, $client->getCloseReason());
 
-        $this->expectException(ClosedException::class);
-        $this->expectExceptionMessage('Connection closed');
-
-        $future->await(); // Should throw a ClosedException.
+        self::assertNull($future->await());
     }
 
     public function testCloseWithoutResponse(): void
@@ -113,7 +109,7 @@ class WebsocketClientTest extends AsyncTestCase
             $invoked = true;
         });
 
-        $future = async(fn () => $client->receive()); // Promise should resolve with null on normal close.
+        $future = async(fn () => $client->receive());
 
         delay(0);
 

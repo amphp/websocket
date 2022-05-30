@@ -28,7 +28,7 @@ final class CloseCode
      */
     public static function getName(int $code): ?string
     {
-        return [
+        return match ($code) {
             self::NORMAL_CLOSE => 'NORMAL_CLOSE',
             self::GOING_AWAY => 'GOING_AWAY',
             self::PROTOCOL_ERROR => 'PROTOCOL_ERROR',
@@ -44,7 +44,20 @@ final class CloseCode
             self::TRY_AGAIN_LATER => 'TRY_AGAIN_LATER',
             self::BAD_GATEWAY => 'BAD_GATEWAY',
             self::TLS_HANDSHAKE_FAILURE => 'TLS_HANDSHAKE_FAILURE',
-        ][$code] ?? null;
+            default => null,
+        };
+    }
+
+    /**
+     * Returns true if the given code is expected to be sent by browsers when closing a connection.
+     * Some applications may define other expected close codes, in which case this function may not apply.
+     */
+    public static function isExpected(int $code): bool
+    {
+        return match ($code) {
+            CloseCode::NORMAL_CLOSE, CloseCode::GOING_AWAY, CloseCode::NONE => true,
+            default => false,
+        };
     }
 
     /**
