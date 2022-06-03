@@ -132,6 +132,8 @@ final class Rfc7692Compression implements CompressionContext
 
     private readonly int $receivingFlushMode;
 
+    private readonly \Closure $errorHandler;
+
     private function __construct(
         int $receivingWindowSize,
         int $sendingWindowSize,
@@ -150,6 +152,10 @@ final class Rfc7692Compression implements CompressionContext
         if (($this->deflate = \deflate_init(\ZLIB_ENCODING_RAW, ['window' => $sendingWindowSize])) === false) {
             throw new \RuntimeException('Failed initializing deflate context');
         }
+
+        $this->errorHandler = static function (int $code, string $message): never {
+            throw new \RuntimeException('Compression error: ' . $message, $code);
+        };
     }
 
     public function getRsv(): int
@@ -168,11 +174,15 @@ final class Rfc7692Compression implements CompressionContext
             $data .= self::EMPTY_BLOCK;
         }
 
-        /** @psalm-suppress InvalidArgument Psalm stubs are outdated */
-        $data = \inflate_add($this->inflate, $data, $this->receivingFlushMode);
+        \set_error_handler($this->errorHandler);
 
-        if (false === $data) {
+        try {
+            /** @psalm-suppress InvalidArgument Psalm stubs are outdated */
+            $data = \inflate_add($this->inflate, $data, $this->receivingFlushMode);
+        } catch (\RuntimeException) {
             return null;
+        } finally {
+            \restore_error_handler();
         }
 
         return $data;
@@ -180,10 +190,13 @@ final class Rfc7692Compression implements CompressionContext
 
     public function compress(string $data, bool $isFinal): string
     {
-        /** @psalm-suppress InvalidArgument Psalm stubs are outdated */
-        $data = \deflate_add($this->deflate, $data, $this->sendingFlushMode);
-        if ($data === false) {
-            throw new \RuntimeException('Failed to compress data');
+        \set_error_handler($this->errorHandler);
+
+        try {
+            /** @psalm-suppress InvalidArgument Psalm stubs are outdated */
+            $data = \deflate_add($this->deflate, $data, $this->sendingFlushMode);
+        } finally {
+            \restore_error_handler();
         }
 
         if ($isFinal && \substr($data, -4) === self::EMPTY_BLOCK) {
