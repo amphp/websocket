@@ -104,11 +104,6 @@ class WebsocketClientTest extends AsyncTestCase
 
         $client = new Rfc6455Client($socket, masked: false, closePeriod: 1);
 
-        $invoked = false;
-        $client->onClose(function () use (&$invoked) {
-            $invoked = true;
-        });
-
         $future = async(fn () => $client->receive());
 
         delay(0);
@@ -121,8 +116,6 @@ class WebsocketClientTest extends AsyncTestCase
         $this->assertSame($reason, $client->getCloseReason());
 
         delay(0);
-
-        $this->assertTrue($invoked);
 
         $this->assertNull($future->await());
     }
@@ -264,18 +257,20 @@ class WebsocketClientTest extends AsyncTestCase
         $socket = $this->createSocket();
 
         $deferred = new DeferredFuture;
+        $future = $deferred->getFuture();
+
+        $socket->method('onClose')
+            ->willReturnCallback(fn (\Closure $onClose) => $future->finally($onClose));
 
         $socket->method('read')
-            ->willReturnCallback(fn () => $deferred->getFuture()->await());
+            ->willReturnCallback(fn () => $future->await());
 
         $socket->expects($this->once())
             ->method('write');
 
         $socket->expects($this->once())
             ->method('close')
-            ->willReturnCallback(function () use ($deferred): void {
-                $deferred->complete(null);
-            });
+            ->willReturnCallback(fn () => $deferred->complete());
 
         $client = new Rfc6455Client($socket, masked: false, closePeriod: 1);
 

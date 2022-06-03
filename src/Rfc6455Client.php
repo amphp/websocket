@@ -32,9 +32,6 @@ final class Rfc6455Client implements WebsocketClient
     /** @var Queue<string>|null */
     private ?Queue $currentMessageEmitter = null;
 
-    /** @var list<Closure(WebsocketClientMetadata):void>|null */
-    private ?array $onClose = [];
-
     private readonly WebsocketClientMetadata $metadata;
 
     private ?DeferredFuture $closeDeferred;
@@ -153,6 +150,8 @@ final class Rfc6455Client implements WebsocketClient
             }
         } catch (\Throwable $exception) {
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
+        } finally {
+            $this->heartbeatQueue?->remove($this);
         }
 
         /** @psalm-suppress PossiblyUndefinedVariable Seems to be a bug in Psalm causing this */
@@ -528,9 +527,18 @@ final class Rfc6455Client implements WebsocketClient
         $this->metadata->closeCode = $code;
         $this->metadata->closeReason = $reason;
 
+        $this->messageEmitter->complete();
+
         try {
             $this->lastWrite?->await();
         } catch (\Throwable) {
+            // Last write failed, so connection has been closed.
+            return;
+        } finally {
+            $this->lastWrite = null;
+        }
+
+        if ($this->socket->isClosed()) {
             return;
         }
 
@@ -546,39 +554,21 @@ final class Rfc6455Client implements WebsocketClient
             ));
         }
 
-        $this->messageEmitter->complete();
-
         try {
             // Wait for peer close frame for configured number of seconds.
-            $this->closeDeferred?->getFuture()
-                ->await(new TimeoutCancellation($this->closePeriod));
-        } catch (\Throwable $exception) {
+            $this->closeDeferred?->getFuture()->await(new TimeoutCancellation($this->closePeriod));
+        } catch (\Throwable) {
             // Failed to write close frame or to receive response frame, but we were disconnecting anyway.
         }
 
         $this->socket->close();
-        $this->lastWrite = Future::complete();
-
-        $onClose = $this->onClose;
-        $this->onClose = null;
-
-        if ($onClose !== null) {
-            foreach ($onClose as $callback) {
-                EventLoop::queue($callback, $this->getInfo());
-            }
-        }
-
-        $this->heartbeatQueue?->remove($this);
+        $this->lastWrite = null;
     }
 
     public function onClose(\Closure $onClose): void
     {
-        if ($this->onClose === null) {
-            EventLoop::queue($onClose, $this->getInfo());
-            return;
-        }
-
-        $this->onClose[] = $onClose;
+        $metadata = $this->metadata;
+        $this->socket->onClose(static fn () => $onClose(clone $metadata));
     }
 
     /**
