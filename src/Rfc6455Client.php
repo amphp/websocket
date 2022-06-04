@@ -18,6 +18,7 @@ use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 use Amp\TimeoutCancellation;
 use Revolt\EventLoop;
+use function Amp\async;
 
 final class Rfc6455Client implements WebsocketClient
 {
@@ -529,34 +530,28 @@ final class Rfc6455Client implements WebsocketClient
 
         $this->messageEmitter->complete();
 
-        try {
-            $this->lastWrite?->await();
-        } catch (\Throwable) {
-            // Last write failed, so connection has been closed.
-            return;
-        } finally {
-            $this->lastWrite = null;
-        }
+        $this->currentMessageEmitter?->error(new ClosedException(
+            'Connection closed while streaming message body',
+            $code,
+            $reason
+        ));
+        $this->currentMessageEmitter = null;
 
         if ($this->socket->isClosed()) {
             return;
         }
 
-        $this->write($code !== CloseCode::NONE ? \pack('n', $code) . $reason : '', Opcode::Close);
-
-        if ($this->currentMessageEmitter) {
-            $emitter = $this->currentMessageEmitter;
-            $this->currentMessageEmitter = null;
-            $emitter->error(new ClosedException(
-                'Connection closed while streaming message body',
-                $code,
-                $reason
-            ));
-        }
-
         try {
+            $cancellation = new TimeoutCancellation($this->closePeriod);
+
+            async(
+                $this->write(...),
+                $code !== CloseCode::NONE ? \pack('n', $code) . $reason : '',
+                Opcode::Close
+            )->await($cancellation);
+
             // Wait for peer close frame for configured number of seconds.
-            $this->closeDeferred?->getFuture()->await(new TimeoutCancellation($this->closePeriod));
+            $this->closeDeferred?->getFuture()->await($cancellation);
         } catch (\Throwable) {
             // Failed to write close frame or to receive response frame, but we were disconnecting anyway.
         }
@@ -577,9 +572,7 @@ final class Rfc6455Client implements WebsocketClient
     private function parser(): \Generator
     {
         $doUtf8Validation = $this->validateUtf8;
-
-        $compressionContext = $this->compressionContext;
-        $compressedFlag = $compressionContext ? $compressionContext->getRsv() : 0;
+        $compressedFlag = $this->compressionContext?->getRsv() ?? 0;
 
         $dataMsgBytesRecd = 0;
         $savedBuffer = '';
@@ -636,7 +629,7 @@ final class Rfc6455Client implements WebsocketClient
                     return;
                 }
             } else { // Text and binary frames
-                if ($rsv !== 0 && (!$compressionContext || $rsv & ~$compressedFlag)) {
+                if ($rsv !== 0 && (!$this->compressionContext || $rsv & ~$compressedFlag)) {
                     $this->onError(CloseCode::PROTOCOL_ERROR, 'Invalid RSV value for negotiated extensions');
                     return;
                 }
@@ -784,7 +777,7 @@ final class Rfc6455Client implements WebsocketClient
 
             if ($compressed) {
                 /** @psalm-suppress PossiblyNullReference */
-                $payload = $compressionContext->decompress($payload, $final);
+                $payload = $this->compressionContext->decompress($payload, $final);
 
                 if ($payload === null) { // Decompression failed.
                     $this->onError(
