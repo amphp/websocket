@@ -22,6 +22,13 @@ use function Amp\async;
 
 final class Rfc6455Client implements WebsocketClient
 {
+    public const DEFAULT_TEXT_ONLY = false;
+    public const DEFAULT_VALIDATE_UTF8 = true;
+    public const DEFAULT_MESSAGE_SIZE_LIMIT = (2 ** 20) * 10; // 10MB
+    public const DEFAULT_FRAME_SIZE_LIMIT = 2 ** 20; // 1MB
+    public const DEFAULT_FRAME_SPLIT_THRESHOLD = 32768; // 32KB
+    public const DEFAULT_CLOSE_PERIOD = 3;
+
     private ?Future $lastWrite = null;
 
     /** @var Queue<WebsocketMessage> */
