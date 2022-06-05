@@ -247,7 +247,7 @@ class WebsocketClientTest extends AsyncTestCase
     public function testMultipleClose(): void
     {
         $this->setMinimumRuntime(1);
-        $this->setTimeout(1.1);
+        $this->setTimeout(1.5);
 
         // Dummy watcher to keep loop running while waiting on timeout in Rfc6455Client::close().
         $watcher = EventLoop::delay(2, function (): void {
