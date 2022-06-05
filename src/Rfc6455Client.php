@@ -308,6 +308,7 @@ final class Rfc6455Client implements WebsocketClient
                 // We need a min() here, else someone might just send a pong frame with a very high pong count and
                 // leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
                 $this->metadata->pongCount = \min($this->metadata->pingCount, (int) $data);
+                $this->metadata->lastHeartbeatAt = \time();
                 break;
 
             default:
@@ -344,7 +345,6 @@ final class Rfc6455Client implements WebsocketClient
 
     public function ping(): void
     {
-        $this->metadata->lastHeartbeatAt = \time();
         ++$this->metadata->pingCount;
         $this->write((string) $this->metadata->pingCount, Opcode::Ping);
     }
