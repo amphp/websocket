@@ -10,6 +10,10 @@ final class Rfc7692Compression implements CompressionContext
     private const MINIMUM_LENGTH = 860;
     private const EMPTY_BLOCK = "\x0\x0\xff\xff";
 
+    private static ?\Closure $inflateErrorHandler;
+
+    private static ?\Closure $deflateErrorHandler;
+
     /**
      * Create a compression context from a header received from a websocket client request.
      *
@@ -132,14 +136,18 @@ final class Rfc7692Compression implements CompressionContext
 
     private readonly int $receivingFlushMode;
 
-    private readonly \Closure $errorHandler;
-
     private function __construct(
         int $receivingWindowSize,
         int $sendingWindowSize,
         bool $receivingContextTakeover,
         bool $sendingContextTakeover
     ) {
+        self::$inflateErrorHandler ??= static fn () => true;
+
+        self::$deflateErrorHandler ??= static function (int $code, string $message): never {
+            throw new \RuntimeException('Error when compressing data: ' . $message, $code);
+        };
+
         $this->receivingFlushMode = $receivingContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH;
         $this->sendingFlushMode = $sendingContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH;
 
@@ -152,10 +160,6 @@ final class Rfc7692Compression implements CompressionContext
         if (($this->deflate = \deflate_init(\ZLIB_ENCODING_RAW, ['window' => $sendingWindowSize])) === false) {
             throw new \RuntimeException('Failed initializing deflate context');
         }
-
-        $this->errorHandler = static function (int $code, string $message): never {
-            throw new \RuntimeException('Compression error: ' . $message, $code);
-        };
     }
 
     public function getRsv(): int
@@ -174,15 +178,17 @@ final class Rfc7692Compression implements CompressionContext
             $data .= self::EMPTY_BLOCK;
         }
 
-        \set_error_handler($this->errorHandler);
+        \set_error_handler(self::$inflateErrorHandler);
 
         try {
             /** @psalm-suppress InvalidArgument Psalm stubs are outdated */
             $data = \inflate_add($this->inflate, $data, $this->receivingFlushMode);
-        } catch (\RuntimeException) {
-            return null;
         } finally {
             \restore_error_handler();
+        }
+
+        if ($data === false) {
+            return null;
         }
 
         return $data;
@@ -190,7 +196,7 @@ final class Rfc7692Compression implements CompressionContext
 
     public function compress(string $data, bool $isFinal): string
     {
-        \set_error_handler($this->errorHandler);
+        \set_error_handler(self::$deflateErrorHandler);
 
         try {
             /** @psalm-suppress InvalidArgument Psalm stubs are outdated */

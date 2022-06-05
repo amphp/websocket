@@ -12,4 +12,12 @@
             <directory name="vendor"/>
         </ignoreFiles>
     </projectFiles>
+
+    <issueHandlers>
+        <MissingClosureReturnType>
+            <errorLevel type="suppress">
+                <directory name="src" />
+            </errorLevel>
+        </MissingClosureReturnType>
+    </issueHandlers>
 </psalm>
