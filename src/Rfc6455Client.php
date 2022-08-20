@@ -9,6 +9,7 @@ use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
 use Amp\DeferredFuture;
 use Amp\Future;
+use Amp\Parser\Parser;
 use Amp\Pipeline\ConcurrentIterator;
 use Amp\Pipeline\DisposedException;
 use Amp\Pipeline\Queue;
@@ -138,7 +139,7 @@ final class Rfc6455Client implements WebsocketClient
 
     private function read(): void
     {
-        $parser = $this->parser();
+        $parser = new Parser($this->parser());
 
         try {
             while (($chunk = $this->socket->read()) !== null) {
@@ -152,7 +153,7 @@ final class Rfc6455Client implements WebsocketClient
                 $this->heartbeatQueue?->update($this);
                 $this->rateLimiter?->notifyBytesReceived($this, \strlen($chunk));
 
-                $parser->send($chunk);
+                $parser->push($chunk);
 
                 $chunk = ''; // Free memory from last chunk read.
             }
@@ -160,6 +161,7 @@ final class Rfc6455Client implements WebsocketClient
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
         } finally {
             $this->heartbeatQueue?->remove($this);
+            $parser->cancel();
         }
 
         /** @psalm-suppress PossiblyUndefinedVariable Seems to be a bug in Psalm causing this */
@@ -575,6 +577,8 @@ final class Rfc6455Client implements WebsocketClient
 
     /**
      * A stateful generator websocket frame parser.
+     *
+     * @return \Generator<int, int, string, void>
      */
     private function parser(): \Generator
     {
@@ -585,25 +589,13 @@ final class Rfc6455Client implements WebsocketClient
         $savedBuffer = '';
         $compressed = false;
 
-        $buffer = yield;
-        $offset = 0;
-        $bufferSize = \strlen($buffer);
-
         while (true) {
             $payload = ''; // Free memory from last frame payload.
 
-            while ($bufferSize < 2) {
-                $buffer = \substr($buffer, $offset);
-                $offset = 0;
-                $buffer .= yield;
-                $bufferSize = \strlen($buffer);
-            }
+            $buffer = yield 2;
 
-            $firstByte = \ord($buffer[$offset]);
-            $secondByte = \ord($buffer[$offset + 1]);
-
-            $offset += 2;
-            $bufferSize -= 2;
+            $firstByte = \ord($buffer[0]);
+            $secondByte = \ord($buffer[1]);
 
             $final = (bool) ($firstByte & 0b10000000);
             $rsv = ($firstByte & 0b01110000) >> 4;
@@ -646,27 +638,9 @@ final class Rfc6455Client implements WebsocketClient
             }
 
             if ($frameLength === 0x7E) {
-                while ($bufferSize < 2) {
-                    $buffer = \substr($buffer, $offset);
-                    $offset = 0;
-                    $buffer .= yield;
-                    $bufferSize = \strlen($buffer);
-                }
-
-                $frameLength = \unpack('n', $buffer[$offset] . $buffer[$offset + 1])[1];
-                $offset += 2;
-                $bufferSize -= 2;
+                $frameLength = \unpack('n', yield 2)[1];
             } elseif ($frameLength === 0x7F) {
-                while ($bufferSize < 8) {
-                    $buffer = \substr($buffer, $offset);
-                    $offset = 0;
-                    $buffer .= yield;
-                    $bufferSize = \strlen($buffer);
-                }
-
-                $lengthLong32Pair = \unpack('N2', \substr($buffer, $offset, 8));
-                $offset += 8;
-                $bufferSize -= 8;
+                $lengthLong32Pair = \unpack('N2', yield 8);
 
                 if (\PHP_INT_MAX === 0x7fffffff) {
                     if ($lengthLong32Pair[1] !== 0 || $lengthLong32Pair[2] < 0) {
@@ -732,28 +706,12 @@ final class Rfc6455Client implements WebsocketClient
             }
 
             if ($isMasked) {
-                while ($bufferSize < 4) {
-                    $buffer = \substr($buffer, $offset);
-                    $offset = 0;
-                    $buffer .= yield;
-                    $bufferSize = \strlen($buffer);
-                }
-
-                $maskingKey = \substr($buffer, $offset, 4);
-                $offset += 4;
-                $bufferSize -= 4;
+                $maskingKey = yield 4;
             }
 
-            while ($bufferSize < $frameLength) {
-                $chunk = yield;
-                $buffer .= $chunk;
-                $bufferSize += \strlen($chunk);
+            if ($frameLength) {
+                $payload = yield $frameLength;
             }
-
-            $payload = \substr($buffer, $offset, $frameLength);
-            $buffer = \substr($buffer, $offset + $frameLength);
-            $offset = 0;
-            $bufferSize = \strlen($buffer);
 
             if ($isMasked) {
                 // This is memory hungry but it's ~70x faster than iterating byte-by-byte
