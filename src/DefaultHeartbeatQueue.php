@@ -2,7 +2,6 @@
 
 namespace Amp\Websocket;
 
-use cash\LRUCache;
 use Revolt\EventLoop;
 use function Amp\async;
 use function Amp\weakClosure;
@@ -14,8 +13,8 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
 
     private readonly string $watcher;
 
-    /** @var LRUCache&\Traversable Least-recently-used cache of next ping (heartbeat) times. */
-    private readonly LRUCache $heartbeatTimeouts;
+    /** @var array<int, int> Least-recently-used cache of next ping (heartbeat) times. */
+    private array $heartbeatTimeouts = [];
 
     /** @var int Cached current time to avoid syscall on each update. */
     private int $now;
@@ -40,13 +39,6 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
 
         $this->now = \time();
 
-        $this->heartbeatTimeouts = new class(\PHP_INT_MAX) extends LRUCache implements \IteratorAggregate {
-            public function getIterator(): \Iterator
-            {
-                yield from $this->data;
-            }
-        };
-
         $this->watcher = EventLoop::repeat(1, weakClosure(function () use ($queuedPingLimit): void {
             $this->now = \time();
 
@@ -58,16 +50,17 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
                 /** @var WebsocketClient|null $client */
                 $client = ($this->clients[$clientId] ?? null)?->get();
                 if (!$client) {
-                    $this->heartbeatTimeouts->remove($clientId);
+                    unset($this->heartbeatTimeouts[$clientId]);
                     continue;
                 }
 
-                $this->heartbeatTimeouts->put($clientId, $this->now + $this->heartbeatPeriod);
-
                 if ($client->getUnansweredPingCount() > $queuedPingLimit) {
+                    $this->remove($client);
                     async($client->close(...), CloseCode::POLICY_VIOLATION, 'Exceeded unanswered PING limit')->ignore();
                     continue;
                 }
+
+                $this->update($client);
 
                 async($client->ping(...))->ignore();
             }
@@ -91,13 +84,13 @@ class DefaultHeartbeatQueue implements HeartbeatQueue
     {
         $id = $client->getId();
         \assert(isset($this->clients[$id]));
-        $this->heartbeatTimeouts->put($id, $this->now + $this->heartbeatPeriod);
+        unset($this->heartbeatTimeouts[$id]); // Unset to force ordering to end of list.
+        $this->heartbeatTimeouts[$id] = $this->now + $this->heartbeatPeriod;
     }
 
     public function remove(WebsocketClient $client): void
     {
         $id = $client->getId();
-        $this->heartbeatTimeouts->remove($id);
-        unset($this->clients[$id]);
+        unset($this->clients[$id], $this->heartbeatTimeouts[$id]);
     }
 }
