@@ -178,14 +178,14 @@ final class Rfc6455Client implements WebsocketClient
     {
         \assert(!$opcode->isControlFrame());
 
+        $this->metadata->lastDataReadAt = \time();
+        ++$this->metadata->framesRead;
+        $this->rateLimiter?->notifyFramesReceived($this, 1);
+
         // Ignore further data received after initiating close.
         if ($this->metadata->closedAt) {
             return;
         }
-
-        $this->metadata->lastDataReadAt = \time();
-        ++$this->metadata->framesRead;
-        $this->rateLimiter?->notifyFramesReceived($this, 1);
 
         if (!$this->currentMessageEmitter) {
             if ($opcode === Opcode::Continuation) {
@@ -247,13 +247,13 @@ final class Rfc6455Client implements WebsocketClient
     {
         \assert($opcode->isControlFrame());
 
+        ++$this->metadata->framesRead;
+        $this->rateLimiter?->notifyFramesReceived($this, 1);
+
         // Close already completed, so ignore any further data from the parser.
         if ($this->metadata->closedAt && $this->closeDeferred === null) {
             return;
         }
-
-        ++$this->metadata->framesRead;
-        $this->rateLimiter?->notifyFramesReceived($this, 1);
 
         switch ($opcode) {
             case Opcode::Close:
@@ -640,19 +640,19 @@ final class Rfc6455Client implements WebsocketClient
             if ($frameLength === 0x7E) {
                 $frameLength = \unpack('n', yield 2)[1];
             } elseif ($frameLength === 0x7F) {
-                $lengthLong32Pair = \unpack('N2', yield 8);
+                [, $highBytes, $lowBytes] = \unpack('N2', yield 8);
 
                 if (\PHP_INT_MAX === 0x7fffffff) {
-                    if ($lengthLong32Pair[1] !== 0 || $lengthLong32Pair[2] < 0) {
+                    if ($highBytes !== 0 || $lowBytes < 0) {
                         $this->onError(
                             CloseCode::MESSAGE_TOO_LARGE,
                             'Received payload exceeds maximum allowable size'
                         );
                         return;
                     }
-                    $frameLength = $lengthLong32Pair[2];
+                    $frameLength = $lowBytes;
                 } else {
-                    $frameLength = ($lengthLong32Pair[1] << 32) | $lengthLong32Pair[2];
+                    $frameLength = ($highBytes << 32) | $lowBytes;
                     if ($frameLength < 0) {
                         $this->onError(
                             CloseCode::PROTOCOL_ERROR,
