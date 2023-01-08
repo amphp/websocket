@@ -14,6 +14,12 @@
     </projectFiles>
 
     <issueHandlers>
+        <DocblockTypeContradiction>
+            <errorLevel type="suppress">
+                <directory name="src"/>
+            </errorLevel>
+        </DocblockTypeContradiction>
+
         <MissingClosureReturnType>
             <errorLevel type="suppress">
                 <directory name="src" />

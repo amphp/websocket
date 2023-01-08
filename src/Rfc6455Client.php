@@ -434,9 +434,6 @@ final class Rfc6455Client implements WebsocketClient
             do {
                 $buffer = $chunk;
 
-                // Needed for Psalm.
-                \assert(\is_string($buffer));
-
                 // Perform another read to avoid sending an empty frame on stream end.
                 $chunk = $stream->read();
 
