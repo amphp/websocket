@@ -10,15 +10,15 @@ use Amp\Cancellation;
 
 /**
  * This class allows streamed and buffered access to the websocket message.
+ *
+ * @implements \IteratorAggregate<int, string>
  */
-final class WebsocketMessage implements ReadableStream
+final class WebsocketMessage implements ReadableStream, \IteratorAggregate
 {
     private readonly Payload $stream;
 
-    private readonly bool $binary;
-
     /**
-     * Create a Message from a UTF-8 text stream.
+     * Create a WebsocketMessage from a UTF-8 text stream.
      *
      * @param ReadableStream|string $stream UTF-8 text stream or string.
      */
@@ -28,7 +28,7 @@ final class WebsocketMessage implements ReadableStream
     }
 
     /**
-     * Create a Message from a binary stream.
+     * Create a WebsocketMessage from a binary stream.
      *
      * @param ReadableStream|string $stream Binary stream or string.
      */
@@ -37,10 +37,9 @@ final class WebsocketMessage implements ReadableStream
         return new self($stream, true);
     }
 
-    private function __construct(ReadableStream|string $stream, bool $binary)
+    private function __construct(ReadableStream|string $stream, private readonly bool $binary)
     {
         $this->stream = new Payload($stream);
-        $this->binary = $binary;
     }
 
     /**
@@ -69,12 +68,7 @@ final class WebsocketMessage implements ReadableStream
      */
     public function read(?Cancellation $cancellation = null): ?string
     {
-        try {
-            return $this->stream->read($cancellation);
-        } catch (StreamException $exception) {
-            $previous = $exception->getPrevious();
-            throw $previous instanceof ClosedException ? $previous : $exception;
-        }
+        return $this->stream->read($cancellation);
     }
 
     /**
@@ -88,12 +82,7 @@ final class WebsocketMessage implements ReadableStream
      */
     public function buffer(?Cancellation $cancellation = null, int $limit = \PHP_INT_MAX): string
     {
-        try {
-            return $this->stream->buffer($cancellation, $limit);
-        } catch (StreamException $exception) {
-            $previous = $exception->getPrevious();
-            throw $previous instanceof ClosedException ? $previous : $exception;
-        }
+        return $this->stream->buffer($cancellation, $limit);
     }
 
     public function isReadable(): bool
@@ -117,5 +106,10 @@ final class WebsocketMessage implements ReadableStream
     public function onClose(\Closure $onClose): void
     {
         $this->stream->onClose($onClose);
+    }
+
+    public function getIterator(): \Traversable
+    {
+        return $this->stream->getIterator();
     }
 }
