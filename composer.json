@@ -35,7 +35,7 @@
         "amphp/parser": "^1",
         "amphp/pipeline": "^1",
         "amphp/socket": "^2",
-         "revolt/event-loop": "^1 || ^0.2.4"
+        "revolt/event-loop": "^1 || ^0.2.4"
     },
     "require-dev": {
         "phpunit/phpunit": "^9",
