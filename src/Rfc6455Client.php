@@ -9,7 +9,6 @@ use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
 use Amp\DeferredFuture;
 use Amp\Future;
-use Amp\Parser\Parser;
 use Amp\Pipeline\ConcurrentIterator;
 use Amp\Pipeline\DisposedException;
 use Amp\Pipeline\Queue;
@@ -21,12 +20,8 @@ use Amp\TimeoutCancellation;
 use Revolt\EventLoop;
 use function Amp\async;
 
-final class Rfc6455Client implements WebsocketClient
+final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
 {
-    public const DEFAULT_TEXT_ONLY = false;
-    public const DEFAULT_VALIDATE_UTF8 = true;
-    public const DEFAULT_MESSAGE_SIZE_LIMIT = (2 ** 20) * 10; // 10MB
-    public const DEFAULT_FRAME_SIZE_LIMIT = 2 ** 20; // 1MB
     public const DEFAULT_FRAME_SPLIT_THRESHOLD = 32768; // 32KB
     public const DEFAULT_CLOSE_PERIOD = 3;
 
@@ -54,10 +49,10 @@ final class Rfc6455Client implements WebsocketClient
         private readonly ?CompressionContext $compressionContext = null,
         private readonly ?HeartbeatQueue $heartbeatQueue = null,
         private readonly ?RateLimiter $rateLimiter = null,
-        private readonly bool $textOnly = self::DEFAULT_TEXT_ONLY,
-        private readonly bool $validateUtf8 = self::DEFAULT_VALIDATE_UTF8,
-        private readonly int $messageSizeLimit = self::DEFAULT_MESSAGE_SIZE_LIMIT,
-        private readonly int $frameSizeLimit = self::DEFAULT_FRAME_SIZE_LIMIT,
+        bool $textOnly = Rfc6455Parser::DEFAULT_TEXT_ONLY,
+        private readonly bool $validateUtf8 = Rfc6455Parser::DEFAULT_VALIDATE_UTF8,
+        int $messageSizeLimit = Rfc6455Parser::DEFAULT_MESSAGE_SIZE_LIMIT,
+        int $frameSizeLimit = Rfc6455Parser::DEFAULT_FRAME_SIZE_LIMIT,
         private readonly int $frameSplitThreshold = self::DEFAULT_FRAME_SPLIT_THRESHOLD,
         private readonly float $closePeriod = self::DEFAULT_CLOSE_PERIOD,
     ) {
@@ -70,7 +65,15 @@ final class Rfc6455Client implements WebsocketClient
 
         $this->heartbeatQueue?->insert($this);
 
-        EventLoop::queue($this->read(...));
+        EventLoop::queue($this->read(...), new Rfc6455Parser(
+            $this,
+            $masked,
+            $compressionContext,
+            $textOnly,
+            $validateUtf8,
+            $messageSizeLimit,
+            $frameSizeLimit
+        ));
     }
 
     public function receive(?Cancellation $cancellation = null): ?WebsocketMessage
@@ -137,10 +140,8 @@ final class Rfc6455Client implements WebsocketClient
         return clone $this->metadata;
     }
 
-    private function read(): void
+    private function read(Rfc6455Parser $parser): void
     {
-        $parser = new Parser($this->parser());
-
         try {
             while (($chunk = $this->socket->read()) !== null) {
                 if ($chunk === '') {
@@ -157,6 +158,9 @@ final class Rfc6455Client implements WebsocketClient
 
                 $chunk = ''; // Free memory from last chunk read.
             }
+        } catch (ParserException $exception) {
+            $message = $exception->getMessage();
+            $code = $exception->getCode();
         } catch (\Throwable $exception) {
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
         } finally {
@@ -170,7 +174,19 @@ final class Rfc6455Client implements WebsocketClient
 
         if (!$this->metadata->closedAt) {
             $this->metadata->closedByPeer = true;
-            $this->close(CloseCode::ABNORMAL_CLOSE, $message ?? 'TCP connection closed unexpectedly');
+            $this->close($code ?? CloseCode::ABNORMAL_CLOSE, $message ?? 'TCP connection closed unexpectedly');
+        }
+    }
+
+    public function handleFrame(Opcode $opcode, string $data, bool $final): void
+    {
+        ++$this->metadata->framesRead;
+        $this->rateLimiter?->notifyFramesReceived($this, 1);
+
+        if ($opcode->isControlFrame()) {
+            $this->onControlFrame($opcode, $data);
+        } else {
+            $this->onData($opcode, $data, $final);
         }
     }
 
@@ -179,8 +195,6 @@ final class Rfc6455Client implements WebsocketClient
         \assert(!$opcode->isControlFrame());
 
         $this->metadata->lastDataReadAt = \time();
-        ++$this->metadata->framesRead;
-        $this->rateLimiter?->notifyFramesReceived($this, 1);
 
         // Ignore further data received after initiating close.
         if ($this->metadata->closedAt) {
@@ -189,7 +203,7 @@ final class Rfc6455Client implements WebsocketClient
 
         if (!$this->currentMessageEmitter) {
             if ($opcode === Opcode::Continuation) {
-                $this->onError(
+                $this->close(
                     CloseCode::PROTOCOL_ERROR,
                     'Illegal CONTINUATION opcode; initial message payload frame must be TEXT or BINARY'
                 );
@@ -207,7 +221,7 @@ final class Rfc6455Client implements WebsocketClient
             $this->messageEmitter->push(self::createMessage(
                 $opcode,
                 $this->currentMessageEmitter
-                    ? new ReadableIterableStream($this->currentMessageEmitter->pipe())
+                    ? new ReadableIterableStream($this->currentMessageEmitter->iterate())
                     : $data,
             ));
 
@@ -215,7 +229,7 @@ final class Rfc6455Client implements WebsocketClient
                 return;
             }
         } elseif ($opcode !== Opcode::Continuation) {
-            $this->onError(
+            $this->close(
                 CloseCode::PROTOCOL_ERROR,
                 'Illegal data type opcode after unfinished previous data type frame; opcode MUST be CONTINUATION'
             );
@@ -246,9 +260,6 @@ final class Rfc6455Client implements WebsocketClient
     private function onControlFrame(Opcode $opcode, string $data): void
     {
         \assert($opcode->isControlFrame());
-
-        ++$this->metadata->framesRead;
-        $this->rateLimiter?->notifyFramesReceived($this, 1);
 
         // Close already completed, so ignore any further data from the parser.
         if ($this->metadata->closedAt && $this->closeDeferred === null) {
@@ -317,11 +328,6 @@ final class Rfc6455Client implements WebsocketClient
                 // This should be unreachable
                 throw new \Error('Non-control frame opcode: ' . $opcode->name);
         }
-    }
-
-    private function onError(int $code, string $reason): void
-    {
-        $this->close($code, $reason);
     }
 
     public function send(string $data): void
@@ -570,215 +576,5 @@ final class Rfc6455Client implements WebsocketClient
     {
         $metadata = $this->metadata;
         $this->socket->onClose(static fn () => $onClose(clone $metadata));
-    }
-
-    /**
-     * A stateful generator websocket frame parser.
-     *
-     * @return \Generator<int, int, string, void>
-     */
-    private function parser(): \Generator
-    {
-        $doUtf8Validation = $this->validateUtf8;
-        $compressedFlag = $this->compressionContext?->getRsv() ?? 0;
-
-        $dataMsgBytesRecd = 0;
-        $savedBuffer = '';
-        $compressed = false;
-
-        while (true) {
-            $payload = ''; // Free memory from last frame payload.
-
-            $buffer = yield 2;
-
-            $firstByte = \ord($buffer[0]);
-            $secondByte = \ord($buffer[1]);
-
-            $final = (bool) ($firstByte & 0b10000000);
-            $rsv = ($firstByte & 0b01110000) >> 4;
-            $opcode = $firstByte & 0b00001111;
-            $isMasked = (bool) ($secondByte & 0b10000000);
-            $maskingKey = '';
-            $frameLength = $secondByte & 0b01111111;
-
-            if ($opcode >= 3 && $opcode <= 7) {
-                $this->onError(CloseCode::PROTOCOL_ERROR, 'Use of reserved non-control frame opcode');
-                return;
-            }
-
-            if ($opcode >= 11 && $opcode <= 15) {
-                $this->onError(CloseCode::PROTOCOL_ERROR, 'Use of reserved control frame opcode');
-                return;
-            }
-
-            $opcode = Opcode::tryFrom($opcode);
-            if (!$opcode) {
-                $this->onError(CloseCode::PROTOCOL_ERROR, 'Invalid opcode');
-                return;
-            }
-
-            $isControlFrame = $opcode->isControlFrame();
-
-            if ($isControlFrame || $opcode === Opcode::Continuation) { // Control and continuation frames
-                if ($rsv !== 0) {
-                    $this->onError(CloseCode::PROTOCOL_ERROR, 'RSV must be 0 for control or continuation frames');
-                    return;
-                }
-            } else { // Text and binary frames
-                if ($rsv !== 0 && (!$this->compressionContext || $rsv & ~$compressedFlag)) {
-                    $this->onError(CloseCode::PROTOCOL_ERROR, 'Invalid RSV value for negotiated extensions');
-                    return;
-                }
-
-                $doUtf8Validation = $this->validateUtf8 && $opcode === Opcode::Text;
-                $compressed = (bool) ($rsv & $compressedFlag);
-            }
-
-            if ($frameLength === 0x7E) {
-                $frameLength = \unpack('n', yield 2)[1];
-            } elseif ($frameLength === 0x7F) {
-                [, $highBytes, $lowBytes] = \unpack('N2', yield 8);
-
-                if (\PHP_INT_MAX === 0x7fffffff) {
-                    if ($highBytes !== 0 || $lowBytes < 0) {
-                        $this->onError(
-                            CloseCode::MESSAGE_TOO_LARGE,
-                            'Received payload exceeds maximum allowable size'
-                        );
-                        return;
-                    }
-                    $frameLength = $lowBytes;
-                } else {
-                    $frameLength = ($highBytes << 32) | $lowBytes;
-                    if ($frameLength < 0) {
-                        $this->onError(
-                            CloseCode::PROTOCOL_ERROR,
-                            'Most significant bit of 64-bit length field set'
-                        );
-                        return;
-                    }
-                }
-            }
-
-            if ($frameLength > 0 && $isMasked === $this->masked) {
-                $this->onError(
-                    CloseCode::PROTOCOL_ERROR,
-                    'Payload mask error'
-                );
-                return;
-            }
-
-            if ($isControlFrame) {
-                if (!$final) {
-                    $this->onError(
-                        CloseCode::PROTOCOL_ERROR,
-                        'Illegal control frame fragmentation'
-                    );
-                    return;
-                }
-
-                if ($frameLength > 125) {
-                    $this->onError(
-                        CloseCode::PROTOCOL_ERROR,
-                        'Control frame payload must be of maximum 125 bytes or less'
-                    );
-                    return;
-                }
-            }
-
-            if ($this->frameSizeLimit && $frameLength > $this->frameSizeLimit) {
-                $this->onError(
-                    CloseCode::MESSAGE_TOO_LARGE,
-                    'Received payload exceeds maximum allowable size'
-                );
-                return;
-            }
-
-            if ($this->messageSizeLimit && ($frameLength + $dataMsgBytesRecd) > $this->messageSizeLimit) {
-                $this->onError(
-                    CloseCode::MESSAGE_TOO_LARGE,
-                    'Received payload exceeds maximum allowable size'
-                );
-                return;
-            }
-
-            if ($isMasked) {
-                $maskingKey = yield 4;
-            }
-
-            if ($frameLength) {
-                $payload = yield $frameLength;
-            }
-
-            if ($isMasked) {
-                // This is memory hungry but it's ~70x faster than iterating byte-by-byte
-                // over the masked string. Deal with it; manual iteration is untenable.
-                /** @psalm-suppress InvalidOperand String operands expected. */
-                $payload ^= \str_repeat($maskingKey, ($frameLength + 3) >> 2);
-            }
-
-            if ($isControlFrame) {
-                $this->onControlFrame($opcode, $payload);
-                continue;
-            }
-
-            if ($this->textOnly && $opcode === Opcode::Binary) {
-                $this->onError(
-                    CloseCode::UNACCEPTABLE_TYPE,
-                    'BINARY opcodes (0x02) not accepted'
-                );
-                return;
-            }
-
-            $dataMsgBytesRecd += $frameLength;
-
-            if ($savedBuffer !== '') {
-                $payload = $savedBuffer . $payload;
-                $savedBuffer = '';
-            }
-
-            if ($compressed) {
-                /** @psalm-suppress PossiblyNullReference */
-                $payload = $this->compressionContext->decompress($payload, $final);
-
-                if ($payload === null) { // Decompression failed.
-                    $this->onError(
-                        CloseCode::PROTOCOL_ERROR,
-                        'Invalid compressed data'
-                    );
-                    return;
-                }
-            }
-
-            if ($doUtf8Validation) {
-                if ($final) {
-                    $valid = \preg_match('//u', $payload);
-                } else {
-                    for ($i = 0; !($valid = \preg_match('//u', $payload)); $i++) {
-                        $savedBuffer = \substr($payload, -1) . $savedBuffer;
-                        $payload = \substr($payload, 0, -1);
-
-                        if ($i === 3) { // Remove a maximum of three bytes
-                            break;
-                        }
-                    }
-                }
-
-                /** @psalm-suppress PossiblyUndefinedVariable Defined in either condition above. */
-                if (!$valid) {
-                    $this->onError(
-                        CloseCode::INCONSISTENT_FRAME_DATA_TYPE,
-                        'Invalid TEXT data; UTF-8 required'
-                    );
-                    return;
-                }
-            }
-
-            if ($final) {
-                $dataMsgBytesRecd = 0;
-            }
-
-            $this->onData($opcode, $payload, $final);
-        }
     }
 }
