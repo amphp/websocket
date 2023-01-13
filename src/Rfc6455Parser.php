@@ -11,10 +11,14 @@ final class Rfc6455Parser extends Parser
     public const DEFAULT_MESSAGE_SIZE_LIMIT = (2 ** 20) * 10; // 10MB
     public const DEFAULT_FRAME_SIZE_LIMIT = 2 ** 20; // 1MB
 
+    private ?Opcode $opcode = null;
+
+    private bool $compress = false;
+
     public function __construct(
         WebsocketFrameHandler $frameHandler,
-        bool $masked,
-        ?CompressionContext $compressionContext = null,
+        private readonly bool $masked,
+        private readonly ?CompressionContext $compressionContext = null,
         bool $textOnly = self::DEFAULT_TEXT_ONLY,
         bool $validateUtf8 = self::DEFAULT_VALIDATE_UTF8,
         int $messageSizeLimit = self::DEFAULT_MESSAGE_SIZE_LIMIT,
@@ -29,6 +33,90 @@ final class Rfc6455Parser extends Parser
             $messageSizeLimit,
             $frameSizeLimit,
         ));
+    }
+
+    /**
+     * Provides stateful compilation of websocket frames. Continuation frames must be proceeded by an initial text
+     * or binary frame. Another text or binary frame cannot be sent until a final continuation frame is sent.
+     * Control frames may be interleaved.
+     */
+    public function compile(string $data, Opcode $opcode, bool $isFinal): string
+    {
+        \assert($this->assertState($opcode));
+
+        if ($this->compressionContext && $opcode === Opcode::Text) {
+            $this->compress = !$isFinal || \strlen($data) > $this->compressionContext->getCompressionThreshold();
+        }
+
+        $this->opcode = match ($opcode) {
+            Opcode::Text, Opcode::Binary => $opcode,
+            default => $this->opcode,
+        };
+
+        $rsv = 0;
+
+        try {
+            if ($this->compressionContext && $this->compress && match ($opcode) {
+                Opcode::Text, Opcode::Continuation => true,
+                default => false,
+            }) {
+                if ($opcode !== Opcode::Continuation) {
+                    $rsv |= $this->compressionContext->getRsv();
+                }
+
+                $data = $this->compressionContext->compress($data, $isFinal);
+            }
+        } catch (\Throwable $exception) {
+            $isFinal = true; // Reset state in finally.
+            throw $exception;
+        } finally {
+            if ($isFinal) {
+                $this->opcode = null;
+                $this->compress = false;
+            }
+        }
+
+        $length = \strlen($data);
+        $w = \chr(((int) $isFinal << 7) | ($rsv << 4) | $opcode->value);
+
+        $maskFlag = $this->masked ? 0x80 : 0;
+
+        if ($length > 0xFFFF) {
+            $w .= \chr(0x7F | $maskFlag) . \pack('J', $length);
+        } elseif ($length > 0x7D) {
+            $w .= \chr(0x7E | $maskFlag) . \pack('n', $length);
+        } else {
+            $w .= \chr($length | $maskFlag);
+        }
+
+        if ($this->masked) {
+            $mask = \random_bytes(4);
+            return $w . $mask . ($data ^ \str_repeat($mask, ($length + 3) >> 2));
+        }
+
+        return $w . $data;
+    }
+
+    private function assertState(Opcode $opcode): bool
+    {
+        if ($this->opcode && match ($opcode) {
+            Opcode::Text, Opcode::Binary => true,
+            default => false,
+        }) {
+            throw new \ValueError(\sprintf(
+                'Next frame must be a continuation or control frame; got %s (0x%d) while sending %s (0x%d)',
+                $opcode->name,
+                \dechex($opcode->value),
+                $this->opcode->name,
+                \dechex($opcode->value),
+            ));
+        }
+
+        if (!$this->opcode && $opcode === Opcode::Continuation) {
+            throw new \ValueError('Cannot send a continuation frame without sending a non-final text or binary frame');
+        }
+
+        return true;
     }
 
     /**
@@ -86,11 +174,17 @@ final class Rfc6455Parser extends Parser
 
             if ($isControlFrame || $opcode === Opcode::Continuation) { // Control and continuation frames
                 if ($rsv !== 0) {
-                    throw new ParserException(CloseCode::PROTOCOL_ERROR, 'RSV must be 0 for control or continuation frames');
+                    throw new ParserException(
+                        CloseCode::PROTOCOL_ERROR,
+                        'RSV must be 0 for control or continuation frames',
+                    );
                 }
             } else { // Text and binary frames
                 if ($rsv !== 0 && (!$compressionContext || $rsv & ~$compressedFlag)) {
-                    throw new ParserException(CloseCode::PROTOCOL_ERROR, 'Invalid RSV value for negotiated extensions');
+                    throw new ParserException(
+                        CloseCode::PROTOCOL_ERROR,
+                        'Invalid RSV value for negotiated extensions',
+                    );
                 }
 
                 $doUtf8Validation = $validateUtf8 && $opcode === Opcode::Text;

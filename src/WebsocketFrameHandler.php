@@ -7,5 +7,5 @@ interface WebsocketFrameHandler
     /**
      * Invoked each time a frame is received by the parser.
      */
-    public function handleFrame(Opcode $opcode, string $data, bool $final): void;
+    public function handleFrame(Opcode $opcode, string $data, bool $isFinal): void;
 }

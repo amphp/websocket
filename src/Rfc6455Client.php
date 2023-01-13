@@ -40,13 +40,15 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
 
     private ?DeferredFuture $closeDeferred;
 
+    private readonly Rfc6455Parser $parser;
+
     /**
      * @param bool $masked True for client, false for server.
      */
     public function __construct(
         private readonly Socket $socket,
-        private readonly bool $masked,
-        private readonly ?CompressionContext $compressionContext = null,
+        bool $masked,
+        ?CompressionContext $compressionContext = null,
         private readonly ?HeartbeatQueue $heartbeatQueue = null,
         private readonly ?RateLimiter $rateLimiter = null,
         bool $textOnly = Rfc6455Parser::DEFAULT_TEXT_ONLY,
@@ -61,11 +63,11 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         $this->messageEmitter = new Queue();
         $this->messageIterator = $this->messageEmitter->iterate();
 
-        $this->metadata = new WebsocketClientMetadata($this->compressionContext !== null);
+        $this->metadata = new WebsocketClientMetadata($compressionContext !== null);
 
         $this->heartbeatQueue?->insert($this);
 
-        EventLoop::queue($this->read(...), new Rfc6455Parser(
+        $this->parser = new Rfc6455Parser(
             $this,
             $masked,
             $compressionContext,
@@ -73,7 +75,9 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
             $validateUtf8,
             $messageSizeLimit,
             $frameSizeLimit
-        ));
+        );
+
+        EventLoop::queue($this->read(...));
     }
 
     public function receive(?Cancellation $cancellation = null): ?WebsocketMessage
@@ -140,7 +144,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         return clone $this->metadata;
     }
 
-    private function read(Rfc6455Parser $parser): void
+    private function read(): void
     {
         try {
             while (($chunk = $this->socket->read()) !== null) {
@@ -154,7 +158,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
                 $this->heartbeatQueue?->update($this);
                 $this->rateLimiter?->notifyBytesReceived($this, \strlen($chunk));
 
-                $parser->push($chunk);
+                $this->parser->push($chunk);
 
                 $chunk = ''; // Free memory from last chunk read.
             }
@@ -165,7 +169,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
         } finally {
             $this->heartbeatQueue?->remove($this);
-            $parser->cancel();
+            $this->parser->cancel();
         }
 
         /** @psalm-suppress PossiblyUndefinedVariable Seems to be a bug in Psalm causing this */
@@ -174,11 +178,14 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
 
         if (!$this->metadata->closedAt) {
             $this->metadata->closedByPeer = true;
-            $this->close($code ?? CloseCode::ABNORMAL_CLOSE, $message ?? 'TCP connection closed unexpectedly');
+            $this->close(
+                $code ?? CloseCode::ABNORMAL_CLOSE,
+                $message ?? 'TCP connection closed unexpectedly',
+            );
         }
     }
 
-    public function handleFrame(Opcode $opcode, string $data, bool $final): void
+    public function handleFrame(Opcode $opcode, string $data, bool $isFinal): void
     {
         ++$this->metadata->framesRead;
         $this->rateLimiter?->notifyFramesReceived($this, 1);
@@ -186,7 +193,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         if ($opcode->isControlFrame()) {
             $this->onControlFrame($opcode, $data);
         } else {
-            $this->onData($opcode, $data, $final);
+            $this->onData($opcode, $data, $isFinal);
         }
     }
 
@@ -231,7 +238,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         } elseif ($opcode !== Opcode::Continuation) {
             $this->close(
                 CloseCode::PROTOCOL_ERROR,
-                'Illegal data type opcode after unfinished previous data type frame; opcode MUST be CONTINUATION'
+                'Illegal data type opcode after unfinished previous data type frame; opcode MUST be CONTINUATION',
             );
             return;
         }
@@ -374,18 +381,8 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         ++$this->metadata->messagesSent;
         $this->metadata->lastDataSentAt = \time();
 
-        $rsv = 0;
-
-        if ($this->compressionContext
-            && $opcode === Opcode::Text
-            && \strlen($data) > $this->compressionContext->getCompressionThreshold()
-        ) {
-            $rsv |= $this->compressionContext->getRsv();
-            $data = $this->compressionContext->compress($data, true);
-        }
-
         try {
-            $this->write($data, $opcode, $rsv, true);
+            $this->write($data, $opcode, true);
         } catch (\Throwable $exception) {
             $code = CloseCode::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
@@ -421,19 +418,11 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         ++$this->metadata->messagesSent;
         $this->metadata->lastDataSentAt = \time();
 
-        $rsv = 0;
-        $compress = false;
-
-        if ($this->compressionContext && $opcode === Opcode::Text) {
-            $rsv |= $this->compressionContext->getRsv();
-            $compress = true;
-        }
-
         try {
             $chunk = $stream->read();
 
             if ($chunk === null) {
-                $this->write('', $opcode, 0, true);
+                $this->write('', $opcode);
                 return;
             }
 
@@ -456,27 +445,15 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
                     for ($i = 0; $i < $slices - 1; ++$i) {
                         $split = \substr($buffer, $splitLength * $i, $splitLength);
 
-                        if ($compress) {
-                            /** @psalm-suppress PossiblyNullReference */
-                            $split = $this->compressionContext->compress($split, false);
-                        }
-
-                        $this->write($split, $opcode, $rsv, false);
+                        $this->write($split, $opcode, false);
                         $opcode = Opcode::Continuation;
-                        $rsv = 0; // RSV must be 0 in continuation frames.
                     }
 
                     $buffer = \substr($buffer, $splitLength * $i, $splitLength);
                 }
 
-                if ($compress) {
-                    /** @psalm-suppress PossiblyNullReference */
-                    $buffer = $this->compressionContext->compress($buffer, $chunk === null);
-                }
-
-                $this->write($buffer, $opcode, $rsv, $chunk === null);
+                $this->write($buffer, $opcode, $chunk === null);
                 $opcode = Opcode::Continuation;
-                $rsv = 0; // RSV must be 0 in continuation frames.
             } while ($chunk !== null);
         } catch (StreamException $exception) {
             $code = CloseCode::ABNORMAL_CLOSE;
@@ -489,38 +466,15 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         }
     }
 
-    private function write(string $data, Opcode $opcode, int $rsv = 0, bool $isFinal = true): void
+    private function write(string $data, Opcode $opcode, bool $isFinal = true): void
     {
-        $frame = $this->compile($data, $opcode, $rsv, $isFinal);
+        $frame = $this->parser->compile($data, $opcode, $isFinal);
 
         ++$this->metadata->framesSent;
         $this->metadata->bytesSent += \strlen($frame);
         $this->metadata->lastSentAt = \time();
 
         $this->socket->write($frame);
-    }
-
-    private function compile(string $data, Opcode $opcode, int $rsv, bool $isFinal): string
-    {
-        $length = \strlen($data);
-        $w = \chr(((int) $isFinal << 7) | ($rsv << 4) | $opcode->value);
-
-        $maskFlag = $this->masked ? 0x80 : 0;
-
-        if ($length > 0xFFFF) {
-            $w .= \chr(0x7F | $maskFlag) . \pack('J', $length);
-        } elseif ($length > 0x7D) {
-            $w .= \chr(0x7E | $maskFlag) . \pack('n', $length);
-        } else {
-            $w .= \chr($length | $maskFlag);
-        }
-
-        if ($this->masked) {
-            $mask = \random_bytes(4);
-            return $w . $mask . ($data ^ \str_repeat($mask, ($length + 3) >> 2));
-        }
-
-        return $w . $data;
     }
 
     public function isClosed(): bool
@@ -545,7 +499,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         $this->currentMessageEmitter?->error(new ClosedException(
             'Connection closed while streaming message body',
             $code,
-            $reason
+            $reason,
         ));
         $this->currentMessageEmitter = null;
 
@@ -559,7 +513,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
             async(
                 $this->write(...),
                 $code !== CloseCode::NONE ? \pack('n', $code) . $reason : '',
-                Opcode::Close
+                Opcode::Close,
             )->await($cancellation);
 
             // Wait for peer close frame for configured number of seconds.
