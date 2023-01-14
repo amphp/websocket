@@ -43,7 +43,7 @@ final class Rfc6455Parser extends Parser implements WebsocketParser
      * or binary frame. Another text or binary frame cannot be sent until a final continuation frame is sent.
      * Control frames may be interleaved.
      */
-    public function compile(string $data, Opcode $opcode, bool $isFinal): string
+    public function compile(Opcode $opcode, string $data, bool $isFinal): string
     {
         \assert($this->assertState($opcode));
 

@@ -8,5 +8,5 @@ interface WebsocketParser
 {
     public function push(string $data): void;
 
-    public function compile(string $data, Opcode $opcode, bool $isFinal): string;
+    public function compile(Opcode $opcode, string $data, bool $isFinal): string;
 }

@@ -309,7 +309,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
                 break;
 
             case Opcode::Ping:
-                $this->write($data, Opcode::Pong);
+                $this->write(Opcode::Pong, $data);
                 break;
 
             case Opcode::Pong:
@@ -333,49 +333,49 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
     public function send(string $data): void
     {
         \assert((bool) \preg_match('//u', $data), 'Text data must be UTF-8');
-        $this->pushData($data, Opcode::Text);
+        $this->pushData(Opcode::Text, $data);
     }
 
     public function sendBinary(string $data): void
     {
-        $this->pushData($data, Opcode::Binary);
+        $this->pushData(Opcode::Binary, $data);
     }
 
     public function stream(ReadableStream $stream): void
     {
-        $this->pushStream($stream, Opcode::Text);
+        $this->pushStream(Opcode::Text, $stream);
     }
 
     public function streamBinary(ReadableStream $stream): void
     {
-        $this->pushStream($stream, Opcode::Binary);
+        $this->pushStream(Opcode::Binary, $stream);
     }
 
     public function ping(): void
     {
         ++$this->metadata->pingCount;
-        $this->write((string) $this->metadata->pingCount, Opcode::Ping);
+        $this->write(Opcode::Ping, (string) $this->metadata->pingCount);
     }
 
-    private function pushData(string $data, Opcode $opcode): void
+    private function pushData(Opcode $opcode, string $data): void
     {
         if ($this->lastWrite || \strlen($data) > $this->frameSplitThreshold) {
             // Treat as a stream if another stream is pending or if splitting the data into multiple frames.
-            $this->pushStream(new ReadableBuffer($data), $opcode);
+            $this->pushStream($opcode, new ReadableBuffer($data));
             return;
         }
 
         // The majority of messages can be sent with a single frame.
-        $this->sendData($data, $opcode);
+        $this->sendData($opcode, $data);
     }
 
-    private function sendData(string $data, Opcode $opcode): void
+    private function sendData(Opcode $opcode, string $data): void
     {
         ++$this->metadata->messagesSent;
         $this->metadata->lastDataSentAt = \time();
 
         try {
-            $this->write($data, $opcode, true);
+            $this->write($opcode, $data);
         } catch (\Throwable $exception) {
             $code = CloseCode::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
@@ -384,7 +384,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         }
     }
 
-    private function pushStream(ReadableStream $stream, Opcode $opcode): void
+    private function pushStream(Opcode $opcode, ReadableStream $stream): void
     {
         $this->lastWrite ??= Future::complete();
 
@@ -415,7 +415,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
             $chunk = $stream->read();
 
             if ($chunk === null) {
-                $this->write('', $opcode);
+                $this->write($opcode, '');
                 return;
             }
 
@@ -438,14 +438,14 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
                     for ($i = 0; $i < $slices - 1; ++$i) {
                         $split = \substr($buffer, $splitLength * $i, $splitLength);
 
-                        $this->write($split, $opcode, false);
+                        $this->write($opcode, $split, false);
                         $opcode = Opcode::Continuation;
                     }
 
                     $buffer = \substr($buffer, $splitLength * $i, $splitLength);
                 }
 
-                $this->write($buffer, $opcode, $chunk === null);
+                $this->write($opcode, $buffer, $chunk === null);
                 $opcode = Opcode::Continuation;
             } while ($chunk !== null);
         } catch (StreamException $exception) {
@@ -459,9 +459,9 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         }
     }
 
-    private function write(string $data, Opcode $opcode, bool $isFinal = true): void
+    private function write(Opcode $opcode, string $data, bool $isFinal = true): void
     {
-        $frame = $this->parser->compile($data, $opcode, $isFinal);
+        $frame = $this->parser->compile($opcode, $data, $isFinal);
 
         ++$this->metadata->framesSent;
         $this->metadata->bytesSent += \strlen($frame);
@@ -505,8 +505,8 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
 
             async(
                 $this->write(...),
-                $code !== CloseCode::NONE ? \pack('n', $code) . $reason : '',
                 Opcode::Close,
+                $code !== CloseCode::NONE ? \pack('n', $code) . $reason : '',
             )->await($cancellation);
 
             // Wait for peer close frame for configured number of seconds.
