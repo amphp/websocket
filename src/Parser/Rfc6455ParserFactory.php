@@ -4,7 +4,7 @@ namespace Amp\Websocket\Parser;
 
 use Amp\Websocket\Compression\CompressionContext;
 
-class Rfc6455ParserFactory implements WebsocketParserFactory
+final class Rfc6455ParserFactory implements WebsocketParserFactory
 {
     public function __construct(
         private readonly bool $textOnly = Rfc6455Parser::DEFAULT_TEXT_ONLY,

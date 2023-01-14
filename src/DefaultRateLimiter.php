@@ -6,7 +6,7 @@ use Revolt\EventLoop;
 use Revolt\EventLoop\Suspension;
 use function Amp\weakClosure;
 
-class DefaultRateLimiter implements RateLimiter
+final class DefaultRateLimiter implements RateLimiter
 {
     /** @var array<int, int> */
     private array $bytesReadInLastSecond = [];

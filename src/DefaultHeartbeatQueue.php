@@ -6,7 +6,7 @@ use Revolt\EventLoop;
 use function Amp\async;
 use function Amp\weakClosure;
 
-class DefaultHeartbeatQueue implements HeartbeatQueue
+final class DefaultHeartbeatQueue implements HeartbeatQueue
 {
     /** @var array<int, \WeakReference<WebsocketClient>> */
     private array $clients = [];
