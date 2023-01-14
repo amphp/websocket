@@ -1,7 +1,6 @@
 <?php declare(strict_types=1);
-/** @noinspection PhpComposerExtensionStubsInspection */
 
-namespace Amp\Websocket;
+namespace Amp\Websocket\Compression;
 
 final class Rfc7692Compression implements CompressionContext
 {

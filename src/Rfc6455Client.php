@@ -17,6 +17,7 @@ use Amp\Socket\Socket;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 use Amp\TimeoutCancellation;
+use Amp\Websocket\Compression\CompressionContext;
 use Amp\Websocket\Parser\ParserException;
 use Amp\Websocket\Parser\WebsocketFrameHandler;
 use Amp\Websocket\Parser\WebsocketParser;

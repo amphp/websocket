@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Amp\Websocket;
+namespace Amp\Websocket\Compression;
 
 final class Rfc7692CompressionFactory implements CompressionContextFactory
 {

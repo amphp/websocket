@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket\Parser;
 
-use Amp\Websocket\CompressionContext;
+use Amp\Websocket\Compression\CompressionContext;
 
 class Rfc6455ParserFactory implements WebsocketParserFactory
 {

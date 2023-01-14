@@ -4,7 +4,7 @@ namespace Amp\Websocket\Parser;
 
 use Amp\Parser\Parser;
 use Amp\Websocket\CloseCode;
-use Amp\Websocket\CompressionContext;
+use Amp\Websocket\Compression\CompressionContext;
 use Amp\Websocket\Opcode;
 
 final class Rfc6455Parser extends Parser implements WebsocketParser
