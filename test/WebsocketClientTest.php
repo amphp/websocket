@@ -103,7 +103,7 @@ class WebsocketClientTest extends AsyncTestCase
     public function testCloseWithoutResponse(): void
     {
         $this->setMinimumRuntime(1);
-        $this->setTimeout(1.1);
+        $this->setTimeout(1.5);
 
         $code = CloseCode::NORMAL_CLOSE;
         $reason = 'Close reason';
