@@ -11,6 +11,7 @@ use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Websocket\CloseCode;
 use Amp\Websocket\Opcode;
+use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Rfc6455Client;
 use PHPUnit\Framework\MockObject\MockObject;
 use Revolt\EventLoop;
@@ -27,12 +28,26 @@ class WebsocketClientTest extends AsyncTestCase
         return $this->createMock(EncryptableSocket::class);
     }
 
+    private function createClient(
+        Socket $socket,
+        int $frameSplitThreshold = Rfc6455Client::DEFAULT_FRAME_SPLIT_THRESHOLD,
+        int $closePeriod = Rfc6455Client::DEFAULT_CLOSE_PERIOD,
+    ): Rfc6455Client {
+        return new Rfc6455Client(
+            socket: $socket,
+            masked: false,
+            parserFactory: new Rfc6455ParserFactory(),
+            frameSplitThreshold: $frameSplitThreshold,
+            closePeriod: $closePeriod,
+        );
+    }
+
     public function testGetId(): void
     {
         $socket = $this->createSocket();
 
-        $client1 = new Rfc6455Client($socket, masked: false);
-        $client2 = new Rfc6455Client($socket, masked: false);
+        $client1 = $this->createClient($socket);
+        $client2 = $this->createClient($socket);
 
         $this->assertNotSame($client1->getId(), $client2->getId());
 
@@ -65,7 +80,7 @@ class WebsocketClientTest extends AsyncTestCase
                 return null;
             });
 
-        $client = new Rfc6455Client($socket, masked: false);
+        $client = $this->createClient($socket);
 
         $future = async(fn () => $client->receive());
 
@@ -102,7 +117,7 @@ class WebsocketClientTest extends AsyncTestCase
                 return null;
             });
 
-        $client = new Rfc6455Client($socket, masked: false, closePeriod: 1);
+        $client = $this->createClient($socket, closePeriod: 1);
 
         $future = async(fn () => $client->receive());
 
@@ -128,7 +143,7 @@ class WebsocketClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive([$packet]);
 
-        $client = new Rfc6455Client($socket, masked: false);
+        $client = $this->createClient($socket);
 
         $client->ping();
 
@@ -143,7 +158,7 @@ class WebsocketClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive([$packet]);
 
-        $client = new Rfc6455Client($socket, masked: false);
+        $client = $this->createClient($socket);
 
         $client->send('data');
 
@@ -166,7 +181,7 @@ class WebsocketClientTest extends AsyncTestCase
                 return [$packet];
             }, $packets));
 
-        $client = new Rfc6455Client($socket, masked: false, frameSplitThreshold: 6);
+        $client = $this->createClient($socket, frameSplitThreshold: 6);
 
         $client->send('chunk1chunk2chunk3end');
     }
@@ -179,7 +194,7 @@ class WebsocketClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive([$packet]);
 
-        $client = new Rfc6455Client($socket, masked: false);
+        $client = $this->createClient($socket);
 
         $client->sendBinary('data');
 
@@ -199,7 +214,7 @@ class WebsocketClientTest extends AsyncTestCase
             ->method('write')
             ->withConsecutive(...$packets);
 
-        $client = new Rfc6455Client($socket, masked: false);
+        $client = $this->createClient($socket);
 
         $emitter = new Queue();
         $emitter->pushAsync('chunk1');
@@ -230,7 +245,7 @@ class WebsocketClientTest extends AsyncTestCase
                 return [$packet];
             }, $packets));
 
-        $client = new Rfc6455Client($socket, masked: false);
+        $client = $this->createClient($socket);
 
         $emitter = new Queue();
         $emitter->pushAsync('chunk1');
@@ -272,7 +287,7 @@ class WebsocketClientTest extends AsyncTestCase
             ->method('close')
             ->willReturnCallback(fn () => $deferred->complete());
 
-        $client = new Rfc6455Client($socket, masked: false, closePeriod: 1);
+        $client = $this->createClient($socket, closePeriod: 1);
 
         $client->onClose($this->createCallback(1));
 

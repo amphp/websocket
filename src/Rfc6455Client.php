@@ -17,6 +17,10 @@ use Amp\Socket\Socket;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 use Amp\TimeoutCancellation;
+use Amp\Websocket\Parser\ParserException;
+use Amp\Websocket\Parser\WebsocketFrameHandler;
+use Amp\Websocket\Parser\WebsocketParser;
+use Amp\Websocket\Parser\WebsocketParserFactory;
 use Revolt\EventLoop;
 use function Amp\async;
 
@@ -40,7 +44,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
 
     private ?DeferredFuture $closeDeferred;
 
-    private readonly Rfc6455Parser $parser;
+    private readonly WebsocketParser $parser;
 
     /**
      * @param bool $masked True for client, false for server.
@@ -48,13 +52,10 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
     public function __construct(
         private readonly Socket $socket,
         bool $masked,
+        WebsocketParserFactory $parserFactory,
         ?CompressionContext $compressionContext = null,
         private readonly ?HeartbeatQueue $heartbeatQueue = null,
         private readonly ?RateLimiter $rateLimiter = null,
-        bool $textOnly = Rfc6455Parser::DEFAULT_TEXT_ONLY,
-        private readonly bool $validateUtf8 = Rfc6455Parser::DEFAULT_VALIDATE_UTF8,
-        int $messageSizeLimit = Rfc6455Parser::DEFAULT_MESSAGE_SIZE_LIMIT,
-        int $frameSizeLimit = Rfc6455Parser::DEFAULT_FRAME_SIZE_LIMIT,
         private readonly int $frameSplitThreshold = self::DEFAULT_FRAME_SPLIT_THRESHOLD,
         private readonly float $closePeriod = self::DEFAULT_CLOSE_PERIOD,
     ) {
@@ -65,17 +66,9 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
 
         $this->metadata = new WebsocketClientMetadata($compressionContext !== null);
 
-        $this->heartbeatQueue?->insert($this);
+        $this->parser = $parserFactory->createParser($this, $masked, $compressionContext);
 
-        $this->parser = new Rfc6455Parser(
-            $this,
-            $masked,
-            $compressionContext,
-            $textOnly,
-            $validateUtf8,
-            $messageSizeLimit,
-            $frameSizeLimit
-        );
+        $this->heartbeatQueue?->insert($this);
 
         EventLoop::queue($this->read(...));
     }
@@ -169,7 +162,6 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
         } finally {
             $this->heartbeatQueue?->remove($this);
-            $this->parser->cancel();
         }
 
         /** @psalm-suppress PossiblyUndefinedVariable Seems to be a bug in Psalm causing this */
@@ -306,7 +298,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
                     ) {
                         $code = CloseCode::PROTOCOL_ERROR;
                         $reason = 'Invalid close code';
-                    } elseif ($this->validateUtf8 && !\preg_match('//u', $reason)) {
+                    } elseif (!\preg_match('//u', $reason)) {
                         $code = CloseCode::INCONSISTENT_FRAME_DATA_TYPE;
                         $reason = 'Close reason must be valid UTF-8';
                     }

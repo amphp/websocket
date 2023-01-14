@@ -1,10 +1,13 @@
 <?php declare(strict_types=1);
 
-namespace Amp\Websocket;
+namespace Amp\Websocket\Parser;
 
 use Amp\Parser\Parser;
+use Amp\Websocket\CloseCode;
+use Amp\Websocket\CompressionContext;
+use Amp\Websocket\Opcode;
 
-final class Rfc6455Parser extends Parser
+final class Rfc6455Parser extends Parser implements WebsocketParser
 {
     public const DEFAULT_TEXT_ONLY = false;
     public const DEFAULT_VALIDATE_UTF8 = true;
