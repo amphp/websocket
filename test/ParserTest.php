@@ -63,9 +63,9 @@ class ParserTest extends AsyncTestCase
 
         foreach ([0 /* 0-1 */, 125 /* 2-3 */, 126 /* 4-5 */, 127 /* 6-7 */, 128 /* 8-9 */, 65535 /* 10-11 */, 65536 /* 12-13 */] as $length) {
             $data = \str_repeat("*", $length);
-            foreach ([Opcode::Text, Opcode::Binary] as $optype) {
-                $input = compile($optype, true, true, $data);
-                $return[] = [$input, $data, $optype === Opcode::Binary];
+            foreach ([Opcode::Text, Opcode::Binary] as $opcode) {
+                $input = compile($opcode, true, true, $data);
+                $return[] = [$input, $data, $opcode === Opcode::Binary];
             }
         }
         //

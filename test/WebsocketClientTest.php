@@ -9,7 +9,9 @@ use Amp\PHPUnit\AsyncTestCase;
 use Amp\Pipeline\Queue;
 use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
+use Amp\Socket\SocketException;
 use Amp\Websocket\CloseCode;
+use Amp\Websocket\ClosedException;
 use Amp\Websocket\Opcode;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Rfc6455Client;
@@ -30,12 +32,13 @@ class WebsocketClientTest extends AsyncTestCase
 
     private function createClient(
         Socket $socket,
+        bool $masked = false,
         int $frameSplitThreshold = Rfc6455Client::DEFAULT_FRAME_SPLIT_THRESHOLD,
         int $closePeriod = Rfc6455Client::DEFAULT_CLOSE_PERIOD,
     ): Rfc6455Client {
         return new Rfc6455Client(
             socket: $socket,
-            masked: false,
+            masked: $masked,
             parserFactory: new Rfc6455ParserFactory(),
             frameSplitThreshold: $frameSplitThreshold,
             closePeriod: $closePeriod,
@@ -91,6 +94,7 @@ class WebsocketClientTest extends AsyncTestCase
         $this->assertTrue($client->isClosed());
         $this->assertFalse($client->isClosedByPeer());
         $this->assertSame($code, $client->getCloseCode());
+        $this->assertFalse(CloseCode::isExpected($code));
         $this->assertSame($reason, $client->getCloseReason());
 
         self::assertNull($future->await());
@@ -128,6 +132,7 @@ class WebsocketClientTest extends AsyncTestCase
         $this->assertTrue($client->isClosed());
         $this->assertFalse($client->isClosedByPeer());
         $this->assertSame($code, $client->getCloseCode());
+        $this->assertTrue(CloseCode::isExpected($code));
         $this->assertSame($reason, $client->getCloseReason());
 
         delay(0);
@@ -259,6 +264,89 @@ class WebsocketClientTest extends AsyncTestCase
         $client->stream($stream);
     }
 
+    public function testSendWithFailedSocket(): void
+    {
+        $socket = $this->createSocket();
+
+        $socket->expects($this->atLeast(2))
+            ->method('write')
+            ->willReturnOnConsecutiveCalls(
+                self::throwException(new SocketException('Mock exception')),
+            );
+
+        $client = $this->createClient($socket);
+
+        $this->expectException(ClosedException::class);
+        $this->expectExceptionMessage('Writing to the client failed');
+
+        $client->send('data');
+    }
+
+    public function testStreamWithFailedSocket(): void
+    {
+        $socket = $this->createSocket();
+
+        $socket->expects($this->atLeast(2))
+            ->method('write')
+            ->willReturnOnConsecutiveCalls(
+                null,
+                self::throwException(new SocketException('Mock exception')),
+            );
+
+        $client = $this->createClient($socket);
+
+        $emitter = new Queue();
+        $emitter->pushAsync('chunk1');
+        $emitter->pushAsync('chunk2');
+        $emitter->pushAsync('chunk');
+        $emitter->pushAsync('3');
+        $emitter->complete();
+
+        $stream = new ReadableIterableStream($emitter->pipe());
+
+        $this->expectException(ClosedException::class);
+        $this->expectExceptionMessage('Writing to the client failed');
+
+        $client->stream($stream);
+    }
+
+    public function testStreamWithFailedStream(): void
+    {
+        $client = $this->createClient($this->createSocket());
+
+        $exception = new \Exception('Test exception');
+
+        $emitter = new Queue();
+        $emitter->pushAsync('chunk');
+        $emitter->error($exception);
+
+        $this->expectExceptionObject($exception);
+
+        $client->stream(new ReadableIterableStream($emitter->pipe()));
+    }
+
+    public function testReceiveWhenSocketCloses(): void
+    {
+        $socket = $this->createSocket();
+
+        $socket->method('read')
+            ->willReturnOnConsecutiveCalls(
+                compile(Opcode::Text, true, true, 'message'),
+                self::throwException(new SocketException('Mock exception')),
+            );
+
+        $client = $this->createClient($socket);
+
+        $message = $client->receive();
+        self::assertSame('message', $message->buffer());
+
+        self::assertNull($client->receive());
+
+        self::assertSame(CloseCode::ABNORMAL_CLOSE, $client->getCloseCode());
+        self::assertFalse(CloseCode::isExpected($client->getCloseCode()));
+        self::assertStringContainsString('TCP connection closed', $client->getCloseReason());
+    }
+
     public function testMultipleClose(): void
     {
         $this->setMinimumRuntime(1);
@@ -303,5 +391,31 @@ class WebsocketClientTest extends AsyncTestCase
         // First close code should be used, second is ignored.
         $this->assertSame(CloseCode::NORMAL_CLOSE, $client->getCloseCode());
         $this->assertSame('First close', $client->getCloseReason());
+    }
+
+    public function testDisposedMessage(): void
+    {
+        $frames = [
+            compile(Opcode::Text, true, false, 'chunk1'),
+            compile(Opcode::Continuation, true, false, 'chunk2'),
+            compile(Opcode::Continuation, true, true, 'chunk3'),
+            compile(Opcode::Text, true, true, 'second'),
+        ];
+
+        $socket = $this->createSocket();
+
+        $socket->method('read')
+            ->willReturnOnConsecutiveCalls(...$frames);
+
+        $client = $this->createClient($socket);
+
+        $message = $client->receive();
+
+        self::assertSame('chunk1', $message->read());
+        unset($message);
+
+        $message = $client->receive();
+
+        self::assertSame('second', $message->read());
     }
 }
