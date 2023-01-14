@@ -10,6 +10,8 @@ final class Rfc7692Compression implements CompressionContext
     private const MINIMUM_LENGTH = 860;
     private const EMPTY_BLOCK = "\x0\x0\xff\xff";
 
+    private static ?\Closure $initErrorHandler;
+
     private static ?\Closure $inflateErrorHandler;
 
     private static ?\Closure $deflateErrorHandler;
@@ -44,6 +46,8 @@ final class Rfc7692Compression implements CompressionContext
     }
 
     /**
+     * Note that 8 is no longer a valid window size, {@see https://github.com/madler/zlib/issues/171}.
+     *
      * @param bool   $isServer True if creating a server context, false if creating a client context.
      * @param string $headerIn Header from request.
      * @param-out string|null $headerOut Sec-Websocket-Extension response header.
@@ -53,7 +57,7 @@ final class Rfc7692Compression implements CompressionContext
         $headerIn = \explode(';', \strtolower($headerIn));
         $headerIn = \array_map('trim', $headerIn);
 
-        if (!\in_array('permessage-deflate', $headerIn, true)) {
+        if (\array_shift($headerIn) !== 'permessage-deflate') {
             return null;
         }
 
@@ -75,19 +79,18 @@ final class Rfc7692Compression implements CompressionContext
             $headers[] = $parts[0];
 
             switch ($parts[0]) {
-                case 'permessage-deflate':
-                    break;
-
                 case 'client_max_window_bits':
-                    if (isset($parts[1])) {
-                        $value = (int) $parts[1];
-
-                        if ($value < 8 || $value > 15) {
-                            return null; // Invalid option value.
-                        }
-
-                        $clientWindowSize = $value;
+                    if (!isset($parts[1])) {
+                        return null;
                     }
+
+                    $value = (int) $parts[1];
+
+                    if ($value < 9 || $value > 15) {
+                        return null; // Invalid option value.
+                    }
+
+                    $clientWindowSize = $value;
 
                     $headerOut .= '; client_max_window_bits=' . $clientWindowSize;
                     break;
@@ -98,15 +101,17 @@ final class Rfc7692Compression implements CompressionContext
                     break;
 
                 case 'server_max_window_bits':
-                    if (isset($parts[1])) {
-                        $value = (int) $parts[1];
-
-                        if ($value < 8 || $value > 15) {
-                            return null; // Invalid option value.
-                        }
-
-                        $serverWindowSize = $value;
+                    if (!isset($parts[1])) {
+                        return null;
                     }
+
+                    $value = (int) $parts[1];
+
+                    if ($value < 9 || $value > 15) {
+                        return null; // Invalid option value.
+                    }
+
+                    $serverWindowSize = $value;
 
                     $headerOut .= '; server_max_window_bits=' . $serverWindowSize;
                     break;
@@ -151,14 +156,17 @@ final class Rfc7692Compression implements CompressionContext
         $this->receivingFlushMode = $receivingContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH;
         $this->sendingFlushMode = $sendingContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH;
 
-        /** @psalm-suppress InvalidPropertyAssignmentValue Psalm stubs are outdated */
-        if (($this->inflate = \inflate_init(\ZLIB_ENCODING_RAW, ['window' => $receivingWindowSize])) === false) {
-            throw new \RuntimeException('Failed initializing inflate context');
-        }
+        \set_error_handler(self::$initErrorHandler ??= static function (int $code, string $message): never {
+            throw new \RuntimeException('Failed to initialized compression context: ' . $message);
+        });
 
-        /** @psalm-suppress InvalidPropertyAssignmentValue Psalm stubs are outdated */
-        if (($this->deflate = \deflate_init(\ZLIB_ENCODING_RAW, ['window' => $sendingWindowSize])) === false) {
-            throw new \RuntimeException('Failed initializing deflate context');
+        try {
+            /** @psalm-suppress InvalidPropertyAssignmentValue Psalm stubs are outdated */
+            $this->inflate = \inflate_init(\ZLIB_ENCODING_RAW, ['window' => $receivingWindowSize]);
+            /** @psalm-suppress InvalidPropertyAssignmentValue Psalm stubs are outdated */
+            $this->deflate = \deflate_init(\ZLIB_ENCODING_RAW, ['window' => $sendingWindowSize]);
+        } finally {
+            \restore_error_handler();
         }
     }
 
