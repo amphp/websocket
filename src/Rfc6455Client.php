@@ -19,6 +19,7 @@ use Amp\Socket\TlsInfo;
 use Amp\TimeoutCancellation;
 use Amp\Websocket\Compression\CompressionContext;
 use Amp\Websocket\Parser\ParserException;
+use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Parser\WebsocketFrameHandler;
 use Amp\Websocket\Parser\WebsocketParser;
 use Amp\Websocket\Parser\WebsocketParserFactory;
@@ -53,7 +54,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
     public function __construct(
         private readonly Socket $socket,
         bool $masked,
-        WebsocketParserFactory $parserFactory,
+        WebsocketParserFactory $parserFactory = new Rfc6455ParserFactory(),
         ?CompressionContext $compressionContext = null,
         private readonly ?HeartbeatQueue $heartbeatQueue = null,
         private readonly ?RateLimiter $rateLimiter = null,
@@ -162,6 +163,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         } catch (\Throwable $exception) {
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
         } finally {
+            $this->parser->cancel();
             $this->heartbeatQueue?->remove($this);
         }
 
@@ -461,7 +463,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
 
     private function write(Opcode $opcode, string $data, bool $isFinal = true): void
     {
-        $frame = $this->parser->compile($opcode, $data, $isFinal);
+        $frame = $this->parser->compileFrame($opcode, $data, $isFinal);
 
         ++$this->metadata->framesSent;
         $this->metadata->bytesSent += \strlen($frame);

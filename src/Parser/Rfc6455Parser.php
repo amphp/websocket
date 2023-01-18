@@ -7,12 +7,14 @@ use Amp\Websocket\CloseCode;
 use Amp\Websocket\Compression\CompressionContext;
 use Amp\Websocket\Opcode;
 
-final class Rfc6455Parser extends Parser implements WebsocketParser
+final class Rfc6455Parser implements WebsocketParser
 {
     public const DEFAULT_TEXT_ONLY = false;
     public const DEFAULT_VALIDATE_UTF8 = true;
     public const DEFAULT_MESSAGE_SIZE_LIMIT = (2 ** 20) * 10; // 10MB
     public const DEFAULT_FRAME_SIZE_LIMIT = 2 ** 20; // 1MB
+
+    private readonly Parser $parser;
 
     private ?Opcode $opcode = null;
 
@@ -27,7 +29,7 @@ final class Rfc6455Parser extends Parser implements WebsocketParser
         int $messageSizeLimit = self::DEFAULT_MESSAGE_SIZE_LIMIT,
         int $frameSizeLimit = self::DEFAULT_FRAME_SIZE_LIMIT,
     ) {
-        parent::__construct(self::parse(
+        $this->parser = new Parser(self::parse(
             $frameHandler,
             $masked,
             $compressionContext,
@@ -38,12 +40,17 @@ final class Rfc6455Parser extends Parser implements WebsocketParser
         ));
     }
 
-    /**
-     * Provides stateful compilation of websocket frames. Continuation frames must be proceeded by an initial text
-     * or binary frame. Another text or binary frame cannot be sent until a final continuation frame is sent.
-     * Control frames may be interleaved.
-     */
-    public function compile(Opcode $opcode, string $data, bool $isFinal): string
+    public function push(string $data): void
+    {
+        $this->parser->push($data);
+    }
+
+    public function cancel(): void
+    {
+        $this->parser->cancel();
+    }
+
+    public function compileFrame(Opcode $opcode, string $data, bool $isFinal): string
     {
         \assert($this->assertState($opcode));
 
