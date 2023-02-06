@@ -7,7 +7,6 @@ use Amp\DeferredFuture;
 use Amp\Future;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Pipeline\Queue;
-use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Socket\SocketException;
 use Amp\Websocket\CloseCode;
@@ -22,12 +21,9 @@ use function Amp\delay;
 
 class WebsocketClientTest extends AsyncTestCase
 {
-    /**
-     * @return Socket&MockObject
-     */
-    protected function createSocket(): Socket
+    protected function createSocket(): Socket&MockObject
     {
-        return $this->createMock(EncryptableSocket::class);
+        return $this->createMock(Socket::class);
     }
 
     private function createClient(

@@ -14,7 +14,6 @@ use Amp\Future;
 use Amp\Pipeline\ConcurrentIterator;
 use Amp\Pipeline\DisposedException;
 use Amp\Pipeline\Queue;
-use Amp\Socket\EncryptableSocket;
 use Amp\Socket\Socket;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
@@ -109,7 +108,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
 
     public function getTlsInfo(): ?TlsInfo
     {
-        return $this->socket instanceof EncryptableSocket ? $this->socket->getTlsInfo() : null;
+        return $this->socket->getTlsInfo();
     }
 
     public function getCloseCode(): int
