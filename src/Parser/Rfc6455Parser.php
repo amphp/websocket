@@ -2,6 +2,8 @@
 
 namespace Amp\Websocket\Parser;
 
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Amp\Parser\Parser;
 use Amp\Websocket\CloseCode;
 use Amp\Websocket\Compression\CompressionContext;
@@ -9,6 +11,9 @@ use Amp\Websocket\Opcode;
 
 final class Rfc6455Parser implements WebsocketParser
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     public const DEFAULT_TEXT_ONLY = false;
     public const DEFAULT_VALIDATE_UTF8 = true;
     public const DEFAULT_MESSAGE_SIZE_LIMIT = (2 ** 20) * 10; // 10MB

@@ -8,6 +8,8 @@ use Amp\ByteStream\ReadableStream;
 use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
 use Amp\DeferredFuture;
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Amp\Future;
 use Amp\Pipeline\ConcurrentIterator;
 use Amp\Pipeline\DisposedException;
@@ -28,6 +30,9 @@ use function Amp\async;
 
 final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     public const DEFAULT_FRAME_SPLIT_THRESHOLD = 32768; // 32KB
     public const DEFAULT_CLOSE_PERIOD = 3;
 

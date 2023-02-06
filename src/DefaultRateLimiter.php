@@ -2,12 +2,17 @@
 
 namespace Amp\Websocket;
 
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Revolt\EventLoop;
 use Revolt\EventLoop\Suspension;
 use function Amp\weakClosure;
 
 final class DefaultRateLimiter implements RateLimiter
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     /** @var array<int, int> */
     private array $bytesReadInLastSecond = [];
 

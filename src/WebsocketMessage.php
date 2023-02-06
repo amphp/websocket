@@ -7,6 +7,8 @@ use Amp\ByteStream\Payload;
 use Amp\ByteStream\ReadableStream;
 use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 
 /**
  * This class allows streamed and buffered access to the websocket message.
@@ -15,6 +17,9 @@ use Amp\Cancellation;
  */
 final class WebsocketMessage implements ReadableStream, \IteratorAggregate
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     private readonly Payload $stream;
 
     /**

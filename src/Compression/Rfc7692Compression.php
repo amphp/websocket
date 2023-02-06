@@ -2,19 +2,25 @@
 
 namespace Amp\Websocket\Compression;
 
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
+
 final class Rfc7692Compression implements CompressionContext
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     public const DEFAULT_WINDOW_SIZE = 15;
 
     private const RSV = 0b100;
     private const MINIMUM_LENGTH = 860;
     private const EMPTY_BLOCK = "\x0\x0\xff\xff";
 
-    private static ?\Closure $initErrorHandler;
+    private static ?\Closure $initErrorHandler = null;
 
-    private static ?\Closure $inflateErrorHandler;
+    private static ?\Closure $inflateErrorHandler = null;
 
-    private static ?\Closure $deflateErrorHandler;
+    private static ?\Closure $deflateErrorHandler = null;
 
     /**
      * Create a compression context from a header received from a websocket client request.
@@ -147,12 +153,6 @@ final class Rfc7692Compression implements CompressionContext
         bool $receivingContextTakeover,
         bool $sendingContextTakeover
     ) {
-        self::$inflateErrorHandler ??= static fn () => true;
-
-        self::$deflateErrorHandler ??= static function (int $code, string $message): never {
-            throw new \RuntimeException('Error when compressing data: ' . $message, $code);
-        };
-
         $this->receivingFlushMode = $receivingContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH;
         $this->sendingFlushMode = $sendingContextTakeover ? \ZLIB_SYNC_FLUSH : \ZLIB_FULL_FLUSH;
 
@@ -186,7 +186,7 @@ final class Rfc7692Compression implements CompressionContext
             $data .= self::EMPTY_BLOCK;
         }
 
-        \set_error_handler(self::$inflateErrorHandler);
+        \set_error_handler(self::$inflateErrorHandler ??= static fn () => true);
 
         try {
             /** @psalm-suppress InvalidArgument Psalm stubs are outdated */
@@ -204,7 +204,9 @@ final class Rfc7692Compression implements CompressionContext
 
     public function compress(string $data, bool $isFinal): string
     {
-        \set_error_handler(self::$deflateErrorHandler);
+        \set_error_handler(self::$deflateErrorHandler ??= static function (int $code, string $message): never {
+            throw new \RuntimeException('Error when compressing data: ' . $message, $code);
+        });
 
         try {
             /** @psalm-suppress InvalidArgument Psalm stubs are outdated */

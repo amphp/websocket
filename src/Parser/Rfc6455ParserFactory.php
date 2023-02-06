@@ -2,10 +2,15 @@
 
 namespace Amp\Websocket\Parser;
 
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Amp\Websocket\Compression\CompressionContext;
 
 final class Rfc6455ParserFactory implements WebsocketParserFactory
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     public function __construct(
         private readonly bool $textOnly = Rfc6455Parser::DEFAULT_TEXT_ONLY,
         private readonly bool $validateUtf8 = Rfc6455Parser::DEFAULT_VALIDATE_UTF8,

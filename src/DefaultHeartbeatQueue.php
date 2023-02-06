@@ -2,12 +2,17 @@
 
 namespace Amp\Websocket;
 
+use Amp\ForbidCloning;
+use Amp\ForbidSerialization;
 use Revolt\EventLoop;
 use function Amp\async;
 use function Amp\weakClosure;
 
 final class DefaultHeartbeatQueue implements HeartbeatQueue
 {
+    use ForbidCloning;
+    use ForbidSerialization;
+
     /** @var array<int, \WeakReference<WebsocketClient>> */
     private array $clients = [];
 
