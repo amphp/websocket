@@ -16,6 +16,7 @@
         "mixed",
         "void",
         "object",
+        "random_bytes",
         "deflate_add",
         "deflate_init",
         "generateAcceptFromKey",
@@ -34,6 +35,7 @@
         "Reflection",
         "SPL",
         "standard",
-        "hash"
+        "hash",
+        "zlib"
     ]
 }
