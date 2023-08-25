@@ -19,6 +19,7 @@ use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 use Amp\TimeoutCancellation;
 use Amp\Websocket\Compression\CompressionContext;
+use Amp\Websocket\Internal\WebsocketClientMetadata;
 use Amp\Websocket\Parser\ParserException;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Parser\WebsocketFrameHandler;
@@ -111,36 +112,40 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         return $this->socket->getTlsInfo();
     }
 
-    public function getCloseCode(): int
+    public function getCloseCode(): ?int
     {
-        if ($this->metadata->closeCode === null) {
-            throw new \Error('The client has not closed');
-        }
-
         return $this->metadata->closeCode;
     }
 
-    public function getCloseReason(): string
+    public function getCloseReason(): ?string
     {
-        if ($this->metadata->closeReason === null) {
-            throw new \Error('The client has not closed');
-        }
-
         return $this->metadata->closeReason;
     }
 
-    public function isClosedByPeer(): bool
+    public function isClosedByPeer(): ?bool
     {
-        if (!$this->metadata->closedAt) {
-            throw new \Error('The client has not closed');
-        }
-
         return $this->metadata->closedByPeer;
     }
 
-    public function getInfo(): WebsocketClientMetadata
+    public function isCompressionEnabled(): bool
     {
-        return clone $this->metadata;
+        return $this->metadata->compressionEnabled;
+    }
+
+    public function getStat(WebsocketClientStatKey $key): int
+    {
+        return $this->getMetadata($key);
+    }
+
+    public function getLastEventTime(WebsocketClientEventKey $key): int
+    {
+        return $this->getMetadata($key);
+    }
+
+    private function getMetadata(\UnitEnum $key): int
+    {
+        $propertyName = strtolower($key->name[0]) . \substr($key->name, 1);
+        return $this->metadata->{$propertyName};
     }
 
     private function read(): void
@@ -487,6 +492,8 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
             return;
         }
 
+        $this->metadata->closedByPeer ??= false;
+
         \assert($code !== CloseCode::NONE || $reason === '');
 
         $this->metadata->closedAt = \time();
@@ -527,7 +534,6 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
 
     public function onClose(\Closure $onClose): void
     {
-        $metadata = $this->metadata;
-        $this->socket->onClose(static fn () => $onClose(clone $metadata));
+        $this->socket->onClose(fn () => $onClose($this));
     }
 }

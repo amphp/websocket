@@ -1,7 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace Amp\Websocket;
+namespace Amp\Websocket\Internal;
 
+/** @internal */
 final class WebsocketClientMetadata
 {
     /** @var int Next sequential client ID. */
@@ -9,7 +10,7 @@ final class WebsocketClientMetadata
 
     public readonly int $id;
 
-    public bool $closedByPeer = false;
+    public ?bool $closedByPeer = null;
 
     public ?int $closeCode = null;
 

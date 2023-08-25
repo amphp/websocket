@@ -7,6 +7,7 @@ use Amp\Cancellation;
 use Amp\Closable;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
+use Amp\Websocket\Internal\WebsocketClientMetadata;
 
 interface WebsocketClient extends Closable
 {
@@ -17,7 +18,7 @@ interface WebsocketClient extends Closable
      * connection or discard the next message. A subsequent call to this method will still return the next message
      * received from the client.
      *
-     * @return WebsocketMessage|null Returns the message sent by the remote or null if the connection closes.
+     * @return WebsocketMessage|null Returns the message sent by the remote or `null` if the connection closes.
      */
     public function receive(?Cancellation $cancellation = null): ?WebsocketMessage;
 
@@ -47,25 +48,28 @@ interface WebsocketClient extends Closable
     public function getUnansweredPingCount(): int;
 
     /**
-     * @return int Client close code (generally one of those listed in Code, though not necessarily).
-     *
-     * @throws \Error Thrown if the client has not closed.
+     * @return int|null Client close code (generally one of those listed in Code, though not necessarily) or `null`
+     *      if the client has not closed.
      */
-    public function getCloseCode(): int;
+    public function getCloseCode(): ?int;
 
     /**
-     * @return string Client close reason.
-     *
-     * @throws \Error Thrown if the client has not closed.
+     * @return string|null Client close reason or `null` if the client has not closed.
      */
-    public function getCloseReason(): string;
+    public function getCloseReason(): ?string;
 
     /**
-     * @return bool True if the peer initiated the websocket close.
+     * @return bool `true` if the peer initiated the websocket close, `false` if initiated by self, or `null` if the
+     *      client has not closed.
      *
      * @throws \Error Thrown if the client has not closed.
      */
-    public function isClosedByPeer(): bool;
+    public function isClosedByPeer(): ?bool;
+
+    /**
+     * @return bool Determines if a compression context has been negotiated.
+     */
+    public function isCompressionEnabled(): bool;
 
     /**
      * Sends a text message to the endpoint. All data sent with this method must be valid UTF-8. Use `sendBinary()` if
@@ -108,13 +112,18 @@ interface WebsocketClient extends Closable
     public function ping(): void;
 
     /**
-     * Returns connection metadata.
+     * Returns connection stat information for the passed enum case.
      */
-    public function getInfo(): WebsocketClientMetadata;
+    public function getStat(WebsocketClientStatKey $key): int;
 
     /**
-     * @return bool {@code false} if the client is still connected, {@code true} if the client has disconnected.
-     * Returns {@code true} as soon as the closing handshake is initiated by the server or client.
+     * Returns the most recent timestamp the given event was observed, or 0 if the event has not occurred.
+     */
+    public function getLastEventTime(WebsocketClientEventKey $key): int;
+
+    /**
+     * @return bool `false` if the client is still connected, `true` if the client has disconnected.
+     * Returns `true` as soon as the closing handshake is initiated by the server or client.
      */
     public function isClosed(): bool;
 
@@ -124,10 +133,9 @@ interface WebsocketClient extends Closable
     public function close(int $code = CloseCode::NORMAL_CLOSE, string $reason = ''): void;
 
     /**
-     * Attaches a callback invoked when the client closes. The callback is passed the close code as the first
-     * parameter and the close reason as the second parameter.
+     * Attaches a callback invoked when the client closes. The callback is passed this client as the only parameter.
      *
-     * @param \Closure(WebsocketClientMetadata):void $onClose
+     * @param \Closure(self):void $onClose
      */
     public function onClose(\Closure $onClose): void;
 }

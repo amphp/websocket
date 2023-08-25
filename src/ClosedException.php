@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-final class ClosedException extends \Exception
+final class ClosedException extends WebsocketException
 {
     private readonly string $reason;
 
