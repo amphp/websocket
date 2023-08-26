@@ -125,7 +125,7 @@ interface WebsocketClient extends Closable, \Traversable
 
     /**
      * @return bool `false` if the client is still connected, `true` if the client has disconnected.
-     * Returns `true` as soon as the closing handshake is initiated by the server or client.
+     *      Returns `true` as soon as the closing handshake is initiated by the server or client.
      */
     public function isClosed(): bool;
 
@@ -137,7 +137,9 @@ interface WebsocketClient extends Closable, \Traversable
     /**
      * Attaches a callback invoked when the client closes. The callback is passed this client as the only parameter.
      *
-     * @param \Closure(self):void $onClose
+     * @param \Closure(int $clientId, int $closeCode, string $closeReason, bool $closedByPeer):void $onClose
+     *      Function is passed the client ID, close code, close reason, and boolean flag if the connection was
+     *      closed by the peer.
      */
     public function onClose(\Closure $onClose): void;
 }

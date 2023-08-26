@@ -10,7 +10,7 @@ final class WebsocketClientMetadata
 
     public readonly int $id;
 
-    public ?bool $closedByPeer = null;
+    public bool $closedByPeer = false;
 
     public ?int $closeCode = null;
 
@@ -52,5 +52,21 @@ final class WebsocketClientMetadata
         $this->id = self::$nextId++;
 
         $this->connectedAt = \time();
+    }
+
+    public function isClosed(): bool
+    {
+        return (bool)$this->closedAt;
+    }
+
+    public function setClosed(int $code, string $reason): void
+    {
+        if ($this->closedAt) {
+            throw new \Error('Connection has already been closed');
+        }
+
+        $this->closedAt = \time();
+        $this->closeCode = $code;
+        $this->closeReason = $reason;
     }
 }

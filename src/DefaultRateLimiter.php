@@ -65,25 +65,23 @@ final class DefaultRateLimiter implements RateLimiter
         EventLoop::cancel($this->watcher);
     }
 
-    public function notifyBytesReceived(WebsocketClient $client, int $bytes): void
+    public function notifyBytesReceived(int $clientId, int $byteCount): void
     {
-        $id = $client->getId();
-        $count = $this->bytesReadInLastSecond[$id] = ($this->bytesReadInLastSecond[$id] ?? 0) + $bytes;
+        $count = $this->bytesReadInLastSecond[$clientId] = ($this->bytesReadInLastSecond[$clientId] ?? 0) + $byteCount;
 
         if ($count >= $this->bytesPerSecondLimit) {
-            $suspension = $this->rateSuspensions[$id] ??= EventLoop::getSuspension();
+            $suspension = $this->rateSuspensions[$clientId] ??= EventLoop::getSuspension();
             EventLoop::reference($this->watcher);
             $suspension->suspend();
         }
     }
 
-    public function notifyFramesReceived(WebsocketClient $client, int $frames): void
+    public function notifyFramesReceived(int $clientId, int $frameCount): void
     {
-        $id = $client->getId();
-        $count = $this->framesReadInLastSecond[$id] = ($this->framesReadInLastSecond[$id] ?? 0) + $frames;
+        $count = $this->framesReadInLastSecond[$clientId] = ($this->framesReadInLastSecond[$clientId] ?? 0) + $frameCount;
 
         if ($count >= $this->framesPerSecondLimit) {
-            $suspension = $this->rateSuspensions[$id] ??= EventLoop::getSuspension();
+            $suspension = $this->rateSuspensions[$clientId] ??= EventLoop::getSuspension();
             EventLoop::reference($this->watcher);
             $suspension->suspend();
         }

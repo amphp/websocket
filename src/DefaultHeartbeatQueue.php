@@ -60,12 +60,12 @@ final class DefaultHeartbeatQueue implements HeartbeatQueue
                 }
 
                 if ($client->getUnansweredPingCount() > $queuedPingLimit) {
-                    $this->remove($client);
+                    $this->remove($clientId);
                     async($client->close(...), CloseCode::POLICY_VIOLATION, 'Exceeded unanswered PING limit')->ignore();
                     continue;
                 }
 
-                $this->update($client);
+                $this->update($clientId);
 
                 async($client->ping(...))->ignore();
             }
@@ -81,21 +81,20 @@ final class DefaultHeartbeatQueue implements HeartbeatQueue
 
     public function insert(WebsocketClient $client): void
     {
-        $this->clients[$client->getId()] = \WeakReference::create($client);
-        $this->update($client);
+        $clientId = $client->getId();
+        $this->clients[$clientId] = \WeakReference::create($client);
+        $this->update($clientId);
     }
 
-    public function update(WebsocketClient $client): void
+    public function update(int $clientId): void
     {
-        $id = $client->getId();
-        \assert(isset($this->clients[$id]));
-        unset($this->heartbeatTimeouts[$id]); // Unset to force ordering to end of list.
-        $this->heartbeatTimeouts[$id] = $this->now + $this->heartbeatPeriod;
+        \assert(isset($this->clients[$clientId]));
+        unset($this->heartbeatTimeouts[$clientId]); // Unset to force ordering to end of list.
+        $this->heartbeatTimeouts[$clientId] = $this->now + $this->heartbeatPeriod;
     }
 
-    public function remove(WebsocketClient $client): void
+    public function remove(int $clientId): void
     {
-        $id = $client->getId();
-        unset($this->clients[$id], $this->heartbeatTimeouts[$id]);
+        unset($this->clients[$clientId], $this->heartbeatTimeouts[$clientId]);
     }
 }

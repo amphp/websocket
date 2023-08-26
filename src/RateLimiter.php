@@ -8,15 +8,15 @@ interface RateLimiter
      * Notify the rate limiter of bytes received by the client. The rate limiter may suspend if it wishes to
      * prevent processing data and receiving further data.
      *
-     * @param positive-int $bytes
+     * @param positive-int $byteCount
      */
-    public function notifyBytesReceived(WebsocketClient $client, int $bytes): void;
+    public function notifyBytesReceived(int $clientId, int $byteCount): void;
 
     /**
      * Notify the rate limiter of frames received by the client. The rate limiter may suspend if it wishes to
      * prevent processing data and receiving further data.
      *
-     * @param positive-int $frames
+     * @param positive-int $frameCount
      */
-    public function notifyFramesReceived(WebsocketClient $client, int $frames): void;
+    public function notifyFramesReceived(int $clientId, int $frameCount): void;
 }
