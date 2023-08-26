@@ -28,7 +28,10 @@ use Amp\Websocket\Parser\WebsocketParserFactory;
 use Revolt\EventLoop;
 use function Amp\async;
 
-final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
+/**
+ * @implements \IteratorAggregate<int, WebsocketMessage>
+ */
+final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \IteratorAggregate
 {
     use ForbidCloning;
     use ForbidSerialization;
@@ -85,6 +88,13 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler
         return $this->messageIterator->continue($cancellation)
             ? $this->messageIterator->getValue()
             : null;
+    }
+
+    public function getIterator(): \Traversable
+    {
+        while ($message = $this->receive()) {
+            yield $message;
+        }
     }
 
     public function getId(): int

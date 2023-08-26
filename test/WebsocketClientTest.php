@@ -416,4 +416,25 @@ class WebsocketClientTest extends AsyncTestCase
 
         self::assertSame('second', $message->read());
     }
+
+    public function testReceiveIteration(): void
+    {
+        $frames = [
+            compile(Opcode::Text, false, true, 'message0'),
+            compile(Opcode::Text, false, true, 'message1'),
+            compile(Opcode::Text, false, true, 'message2'),
+            compile(Opcode::Close, false, true),
+        ];
+
+        $socket = $this->createSocket();
+
+        $socket->method('read')
+            ->willReturnOnConsecutiveCalls(...$frames);
+
+        $client = $this->createClient($socket, true);
+
+        foreach ($client as $key =>  $message) {
+            self::assertSame('message' . $key, $message->buffer());
+        }
+    }
 }

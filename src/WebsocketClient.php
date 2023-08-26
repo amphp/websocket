@@ -7,9 +7,11 @@ use Amp\Cancellation;
 use Amp\Closable;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
-use Amp\Websocket\Internal\WebsocketClientMetadata;
 
-interface WebsocketClient extends Closable
+/**
+ * @extends \Traversable<int, WebsocketMessage>
+ */
+interface WebsocketClient extends Closable, \Traversable
 {
     /**
      * Receive a message from the remote Websocket endpoint.
