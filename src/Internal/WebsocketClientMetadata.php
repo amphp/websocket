@@ -56,7 +56,7 @@ final class WebsocketClientMetadata
 
     public function isClosed(): bool
     {
-        return (bool)$this->closedAt;
+        return (bool) $this->closedAt;
     }
 
     public function setClosed(int $code, string $reason): void

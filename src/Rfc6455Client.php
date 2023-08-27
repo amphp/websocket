@@ -141,18 +141,29 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
 
     public function getStat(WebsocketClientStatKey $key): int
     {
-        return $this->getMetadata($key);
+        return match ($key) {
+            WebsocketClientStatKey::BytesRead => $this->metadata->bytesRead,
+            WebsocketClientStatKey::BytesSent => $this->metadata->bytesSent,
+            WebsocketClientStatKey::FramesRead => $this->metadata->framesRead,
+            WebsocketClientStatKey::FramesSent => $this->metadata->framesSent,
+            WebsocketClientStatKey::MessagesRead => $this->metadata->messagesRead,
+            WebsocketClientStatKey::MessagesSent => $this->metadata->messagesSent,
+            WebsocketClientStatKey::PingCount => $this->metadata->pingCount,
+            WebsocketClientStatKey::PongCount => $this->metadata->pongCount,
+        };
     }
 
     public function getLastEventTime(WebsocketClientEventKey $key): int
     {
-        return $this->getMetadata($key);
-    }
-
-    private function getMetadata(\UnitEnum $key): int
-    {
-        $propertyName = strtolower($key->name[0]) . \substr($key->name, 1);
-        return $this->metadata->{$propertyName};
+        return match ($key) {
+            WebsocketClientEventKey::ConnectedAt => $this->metadata->connectedAt,
+            WebsocketClientEventKey::ClosedAt => $this->metadata->closedAt,
+            WebsocketClientEventKey::LastReadAt => $this->metadata->lastReadAt,
+            WebsocketClientEventKey::LastSentAt => $this->metadata->lastSentAt,
+            WebsocketClientEventKey::LastDataReadAt => $this->metadata->lastDataReadAt,
+            WebsocketClientEventKey::LastDataSentAt => $this->metadata->lastDataSentAt,
+            WebsocketClientEventKey::LastHeartbeatAt => $this->metadata->lastHeartbeatAt,
+        };
     }
 
     private function read(
