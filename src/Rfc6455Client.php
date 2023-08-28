@@ -3,7 +3,6 @@
 namespace Amp\Websocket;
 
 use Amp\ByteStream\ReadableBuffer;
-use Amp\ByteStream\ReadableIterableStream;
 use Amp\ByteStream\ReadableStream;
 use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
@@ -11,25 +10,18 @@ use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
 use Amp\Future;
 use Amp\Pipeline\ConcurrentIterator;
-use Amp\Pipeline\DisposedException;
-use Amp\Pipeline\Queue;
 use Amp\Socket\Socket;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
-use Amp\TimeoutCancellation;
 use Amp\Websocket\Compression\CompressionContext;
-use Amp\Websocket\Parser\ParserException;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
-use Amp\Websocket\Parser\WebsocketFrameHandler;
-use Amp\Websocket\Parser\WebsocketParser;
 use Amp\Websocket\Parser\WebsocketParserFactory;
 use Revolt\EventLoop;
-use function Amp\async;
 
 /**
  * @implements \IteratorAggregate<int, WebsocketMessage>
  */
-final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \IteratorAggregate
+final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
 {
     use ForbidCloning;
     use ForbidSerialization;
@@ -37,15 +29,12 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
     public const DEFAULT_FRAME_SPLIT_THRESHOLD = 32768; // 32KB
     public const DEFAULT_CLOSE_PERIOD = 3;
 
-    private ?Future $lastWrite = null;
-
     /** @var ConcurrentIterator<WebsocketMessage> */
     private readonly ConcurrentIterator $messageIterator;
 
-    private readonly Internal\WebsocketClientQueues $queues;
-    private readonly Internal\WebsocketClientMetadata $metadata;
+    private readonly Internal\Rfc6455FrameHandler $frameHandler;
 
-    private readonly WebsocketParser $parser;
+    private readonly Internal\WebsocketClientMetadata $metadata;
 
     /**
      * @param bool $masked True for client, false for server.
@@ -55,29 +44,34 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
         bool $masked,
         WebsocketParserFactory $parserFactory = new Rfc6455ParserFactory(),
         ?CompressionContext $compressionContext = null,
-        private readonly ?HeartbeatQueue $heartbeatQueue = null,
-        private readonly ?RateLimiter $rateLimiter = null,
+        ?HeartbeatQueue $heartbeatQueue = null,
+        ?RateLimiter $rateLimiter = null,
         private readonly int $frameSplitThreshold = self::DEFAULT_FRAME_SPLIT_THRESHOLD,
-        private readonly float $closePeriod = self::DEFAULT_CLOSE_PERIOD,
+        float $closePeriod = self::DEFAULT_CLOSE_PERIOD,
     ) {
-        $this->queues = new Internal\WebsocketClientQueues();
         $this->metadata = new Internal\WebsocketClientMetadata($compressionContext !== null);
 
-        $this->messageIterator = $this->queues->messageQueue->iterate();
-
-        $this->parser = $parserFactory->createParser($this, $masked, $compressionContext);
-
-        $this->heartbeatQueue?->insert($this);
-
-        EventLoop::queue(
-            $this->read(...),
-            socket: $this->socket,
-            parser: $this->parser,
-            heartbeatQueue: $this->heartbeatQueue,
-            rateLimiter: $this->rateLimiter,
-            queues: $this->queues,
+        $this->frameHandler = new Internal\Rfc6455FrameHandler(
+            socket: $socket,
+            masked: $masked,
+            parserFactory: $parserFactory,
+            compressionContext: $compressionContext,
+            heartbeatQueue: $heartbeatQueue,
+            rateLimiter: $rateLimiter,
             metadata: $this->metadata,
+            closePeriod: $closePeriod,
         );
+
+        $this->messageIterator = $this->frameHandler->iterate();
+
+        $heartbeatQueue?->insert($this);
+
+        EventLoop::queue($this->frameHandler->read(...));
+    }
+
+    public function __destruct()
+    {
+        $this->close();
     }
 
     public function receive(?Cancellation $cancellation = null): ?WebsocketMessage
@@ -166,203 +160,6 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
         };
     }
 
-    private function read(
-        Socket $socket,
-        WebsocketParser $parser,
-        ?HeartbeatQueue $heartbeatQueue,
-        ?RateLimiter $rateLimiter,
-        Internal\WebsocketClientQueues $queues,
-        Internal\WebsocketClientMetadata $metadata,
-    ): void {
-        try {
-            while (($chunk = $socket->read()) !== null) {
-                if ($chunk === '') {
-                    continue;
-                }
-
-                $metadata->lastReadAt = \time();
-                $metadata->bytesRead += \strlen($chunk);
-
-                $heartbeatQueue?->update($metadata->id);
-                $rateLimiter?->notifyBytesReceived($metadata->id, \strlen($chunk));
-
-                $parser->push($chunk);
-
-                $chunk = ''; // Free memory from last chunk read.
-            }
-        } catch (ParserException $exception) {
-            $message = $exception->getMessage();
-            $code = $exception->getCode();
-        } catch (\Throwable $exception) {
-            $message = 'TCP connection closed with exception: ' . $exception->getMessage();
-        } finally {
-            $parser->cancel();
-            $heartbeatQueue?->remove($metadata->id);
-        }
-
-        $this->queues->complete();
-
-        if (!$metadata->isClosed()) {
-            $code ??= CloseCode::ABNORMAL_CLOSE;
-            $message ??= 'TCP connection closed unexpectedly';
-
-            $metadata->closedByPeer = true;
-            $metadata->setClosed($code, $message);
-            $queues->close($code, $message);
-        }
-    }
-
-    public function handleFrame(Opcode $opcode, string $data, bool $isFinal): void
-    {
-        ++$this->metadata->framesRead;
-        $this->rateLimiter?->notifyFramesReceived($this->metadata->id, 1);
-
-        if ($opcode->isControlFrame()) {
-            $this->onControlFrame($opcode, $data);
-        } else {
-            $this->onData($opcode, $data, $isFinal);
-        }
-    }
-
-    private function onData(Opcode $opcode, string $data, bool $terminated): void
-    {
-        \assert(!$opcode->isControlFrame());
-
-        $this->metadata->lastDataReadAt = \time();
-
-        // Ignore further data received after initiating close.
-        if ($this->metadata->isClosed()) {
-            return;
-        }
-
-        if (!$this->queues->currentMessageQueue) {
-            if ($opcode === Opcode::Continuation) {
-                $this->close(
-                    CloseCode::PROTOCOL_ERROR,
-                    'Illegal CONTINUATION opcode; initial message payload frame must be TEXT or BINARY'
-                );
-                return;
-            }
-
-            ++$this->metadata->messagesRead;
-
-            if (!$terminated) {
-                $this->queues->currentMessageQueue = new Queue();
-            }
-
-            // Avoid holding a reference to the ReadableStream or Message object here so destructors will be invoked
-            // if the message is not consumed by the user.
-            $this->queues->messageQueue->push(self::createMessage(
-                $opcode,
-                $this->queues->currentMessageQueue
-                    ? new ReadableIterableStream($this->queues->currentMessageQueue->iterate())
-                    : $data,
-            ));
-
-            if (!$this->queues->currentMessageQueue) {
-                return;
-            }
-        } elseif ($opcode !== Opcode::Continuation) {
-            $this->close(
-                CloseCode::PROTOCOL_ERROR,
-                'Illegal data type opcode after unfinished previous data type frame; opcode MUST be CONTINUATION',
-            );
-            return;
-        }
-
-        try {
-            $this->queues->currentMessageQueue->push($data);
-        } catch (DisposedException) {
-            // Message disposed, ignore exception.
-        }
-
-        if ($terminated) {
-            $this->queues->currentMessageQueue->complete();
-            $this->queues->currentMessageQueue = null;
-        }
-    }
-
-    private static function createMessage(Opcode $opcode, ReadableStream|string $stream): WebsocketMessage
-    {
-        if ($opcode === Opcode::Binary) {
-            return WebsocketMessage::fromBinary($stream);
-        }
-
-        return WebsocketMessage::fromText($stream);
-    }
-
-    private function onControlFrame(Opcode $opcode, string $data): void
-    {
-        \assert($opcode->isControlFrame());
-
-        // Close already completed, so ignore any further data from the parser.
-        if ($this->metadata->isClosed() && $this->queues->isComplete()) {
-            return;
-        }
-
-        switch ($opcode) {
-            case Opcode::Close:
-                $this->queues->complete();
-
-                if ($this->metadata->isClosed()) {
-                    break;
-                }
-
-                $this->metadata->closedByPeer = true;
-
-                $length = \strlen($data);
-                if ($length === 0) {
-                    $code = CloseCode::NONE;
-                    $reason = '';
-                } elseif ($length < 2) {
-                    $code = CloseCode::PROTOCOL_ERROR;
-                    $reason = 'Close code must be two bytes';
-                } else {
-                    $code = \unpack('n', $data)[1];
-                    $reason = \substr($data, 2);
-
-                    if ($code < 1000 // Reserved and unused.
-                        || ($code >= 1004 && $code <= 1006) // Should not be sent over wire
-                        || ($code >= 1014 && $code <= 1015) // Should not be sent over wire
-                        || ($code >= 1016 && $code <= 1999) // Disallowed, reserved for future use
-                        || ($code >= 2000 && $code <= 2999) // Disallowed, reserved for Websocket extensions
-                        // 3000-3999 allowed, reserved for libraries
-                        // 4000-4999 allowed, reserved for applications
-                        || $code >= 5000 // >= 5000 invalid
-                    ) {
-                        $code = CloseCode::PROTOCOL_ERROR;
-                        $reason = 'Invalid close code';
-                    } elseif (!\preg_match('//u', $reason)) {
-                        $code = CloseCode::INCONSISTENT_FRAME_DATA_TYPE;
-                        $reason = 'Close reason must be valid UTF-8';
-                    }
-                }
-
-                $this->close($code, $reason);
-                break;
-
-            case Opcode::Ping:
-                $this->write(Opcode::Pong, $data);
-                break;
-
-            case Opcode::Pong:
-                if (!\preg_match('/^[1-9][0-9]*$/', $data)) {
-                    // Ignore pong payload that is not an integer.
-                    break;
-                }
-
-                // We need a min() here, else someone might just send a pong frame with a very high pong count and
-                // leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
-                $this->metadata->pongCount = \min($this->metadata->pingCount, (int) $data);
-                $this->metadata->lastHeartbeatAt = \time();
-                break;
-
-            default:
-                // This should be unreachable
-                throw new \Error('Non-control frame opcode: ' . $opcode->name);
-        }
-    }
-
     public function send(string $data): void
     {
         \assert((bool) \preg_match('//u', $data), 'Text data must be UTF-8');
@@ -387,12 +184,12 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
     public function ping(): void
     {
         ++$this->metadata->pingCount;
-        $this->write(Opcode::Ping, (string) $this->metadata->pingCount);
+        $this->frameHandler->write(Opcode::Ping, (string) $this->metadata->pingCount);
     }
 
     private function pushData(Opcode $opcode, string $data): void
     {
-        if ($this->lastWrite || \strlen($data) > $this->frameSplitThreshold) {
+        if ($this->metadata->lastWrite || \strlen($data) > $this->frameSplitThreshold) {
             // Treat as a stream if another stream is pending or if splitting the data into multiple frames.
             $this->pushStream($opcode, new ReadableBuffer($data));
             return;
@@ -408,7 +205,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
         $this->metadata->lastDataSentAt = \time();
 
         try {
-            $this->write($opcode, $data);
+            $this->frameHandler->write($opcode, $data);
         } catch (\Throwable $exception) {
             $code = CloseCode::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
@@ -419,24 +216,24 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
 
     private function pushStream(Opcode $opcode, ReadableStream $stream): void
     {
-        $this->lastWrite ??= Future::complete();
+        $this->metadata->lastWrite ??= Future::complete();
 
-        // Setting $this->lastWrite will force subsequent sends to queue until this stream has ended.
-        $this->lastWrite = $thisWrite = $this->lastWrite->map(
+        // Setting $this->metadata->lastWrite will force subsequent sends to queue until this stream has ended.
+        $this->metadata->lastWrite = $thisWrite = $this->metadata->lastWrite->map(
             function () use (&$thisWrite, $stream, $opcode): void {
                 try {
                     $this->sendStream($stream, $opcode);
                 } finally {
                     // Null the reference to this coroutine if no other writes have been made so subsequent
                     // writes do not have to await a future.
-                    if ($this->lastWrite === $thisWrite) {
-                        $this->lastWrite = null;
+                    if ($this->metadata->lastWrite === $thisWrite) {
+                        $this->metadata->lastWrite = null;
                     }
                 }
             }
         );
 
-        $this->lastWrite->await();
+        $this->metadata->lastWrite->await();
     }
 
     private function sendStream(ReadableStream $stream, Opcode $opcode): void
@@ -448,7 +245,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
             $chunk = $stream->read();
 
             if ($chunk === null) {
-                $this->write($opcode, '');
+                $this->frameHandler->write($opcode, '');
                 return;
             }
 
@@ -471,14 +268,14 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
                     for ($i = 0; $i < $slices - 1; ++$i) {
                         $split = \substr($buffer, $splitLength * $i, $splitLength);
 
-                        $this->write($opcode, $split, false);
+                        $this->frameHandler->write($opcode, $split, false);
                         $opcode = Opcode::Continuation;
                     }
 
                     $buffer = \substr($buffer, $splitLength * $i, $splitLength);
                 }
 
-                $this->write($opcode, $buffer, $chunk === null);
+                $this->frameHandler->write($opcode, $buffer, $chunk === null);
                 $opcode = Opcode::Continuation;
             } while ($chunk !== null);
         } catch (StreamException $exception) {
@@ -492,17 +289,6 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
         }
     }
 
-    private function write(Opcode $opcode, string $data, bool $isFinal = true): void
-    {
-        $frame = $this->parser->compileFrame($opcode, $data, $isFinal);
-
-        ++$this->metadata->framesSent;
-        $this->metadata->bytesSent += \strlen($frame);
-        $this->metadata->lastSentAt = \time();
-
-        $this->socket->write($frame);
-    }
-
     public function isClosed(): bool
     {
         return $this->metadata->isClosed();
@@ -510,36 +296,7 @@ final class Rfc6455Client implements WebsocketClient, WebsocketFrameHandler, \It
 
     public function close(int $code = CloseCode::NORMAL_CLOSE, string $reason = ''): void
     {
-        if ($this->metadata->isClosed()) {
-            return;
-        }
-
-        \assert($code !== CloseCode::NONE || $reason === '');
-
-        $this->metadata->setClosed($code, $reason);
-        $this->queues->close($code, $reason);
-
-        if ($this->socket->isClosed()) {
-            return;
-        }
-
-        try {
-            $cancellation = new TimeoutCancellation($this->closePeriod);
-
-            async(
-                $this->write(...),
-                Opcode::Close,
-                $code !== CloseCode::NONE ? \pack('n', $code) . $reason : '',
-            )->await($cancellation);
-
-            // Wait for peer close frame for configured number of seconds.
-            $this->queues->await($cancellation);
-        } catch (\Throwable) {
-            // Failed to write close frame or to receive response frame, but we were disconnecting anyway.
-        }
-
-        $this->socket->close();
-        $this->lastWrite = null;
+        $this->frameHandler->close($code, $reason);
     }
 
     public function onClose(\Closure $onClose): void

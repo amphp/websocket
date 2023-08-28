@@ -2,6 +2,8 @@
 
 namespace Amp\Websocket\Internal;
 
+use Amp\Future;
+
 /** @internal */
 final class WebsocketClientMetadata
 {
@@ -46,6 +48,8 @@ final class WebsocketClientMetadata
 
     public int $pongCount = 0;
 
+    public ?Future $lastWrite = null;
+
     public function __construct(
         public readonly bool $compressionEnabled,
     ) {
@@ -57,16 +61,5 @@ final class WebsocketClientMetadata
     public function isClosed(): bool
     {
         return (bool) $this->closedAt;
-    }
-
-    public function setClosed(int $code, string $reason): void
-    {
-        if ($this->closedAt) {
-            throw new \Error('Connection has already been closed');
-        }
-
-        $this->closedAt = \time();
-        $this->closeCode = $code;
-        $this->closeReason = $reason;
     }
 }
