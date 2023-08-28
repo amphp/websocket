@@ -36,6 +36,8 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
 
     private readonly Internal\WebsocketClientMetadata $metadata;
 
+    private ?Future $lastWrite = null;
+
     /**
      * @param bool $masked True for client, false for server.
      */
@@ -189,7 +191,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
 
     private function pushData(Opcode $opcode, string $data): void
     {
-        if ($this->metadata->lastWrite || \strlen($data) > $this->frameSplitThreshold) {
+        if ($this->lastWrite || \strlen($data) > $this->frameSplitThreshold) {
             // Treat as a stream if another stream is pending or if splitting the data into multiple frames.
             $this->pushStream($opcode, new ReadableBuffer($data));
             return;
@@ -216,24 +218,24 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
 
     private function pushStream(Opcode $opcode, ReadableStream $stream): void
     {
-        $this->metadata->lastWrite ??= Future::complete();
+        $this->lastWrite ??= Future::complete();
 
-        // Setting $this->metadata->lastWrite will force subsequent sends to queue until this stream has ended.
-        $this->metadata->lastWrite = $thisWrite = $this->metadata->lastWrite->map(
+        // Setting $this->lastWrite will force subsequent sends to queue until this stream has ended.
+        $this->lastWrite = $thisWrite = $this->lastWrite->map(
             function () use (&$thisWrite, $stream, $opcode): void {
                 try {
                     $this->sendStream($stream, $opcode);
                 } finally {
                     // Null the reference to this coroutine if no other writes have been made so subsequent
                     // writes do not have to await a future.
-                    if ($this->metadata->lastWrite === $thisWrite) {
-                        $this->metadata->lastWrite = null;
+                    if ($this->lastWrite === $thisWrite) {
+                        $this->lastWrite = null;
                     }
                 }
             }
         );
 
-        $this->metadata->lastWrite->await();
+        $this->lastWrite->await();
     }
 
     private function sendStream(ReadableStream $stream, Opcode $opcode): void
@@ -297,6 +299,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
     public function close(int $code = CloseCode::NORMAL_CLOSE, string $reason = ''): void
     {
         $this->frameHandler->close($code, $reason);
+        $this->lastWrite = null;
     }
 
     public function onClose(\Closure $onClose): void

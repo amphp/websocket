@@ -297,7 +297,6 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         }
 
         $this->socket->close();
-        $this->metadata->lastWrite = null;
     }
 
     private static function createMessage(Opcode $opcode, ReadableStream|string $stream): WebsocketMessage

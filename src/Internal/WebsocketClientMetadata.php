@@ -48,8 +48,6 @@ final class WebsocketClientMetadata
 
     public int $pongCount = 0;
 
-    public ?Future $lastWrite = null;
-
     public function __construct(
         public readonly bool $compressionEnabled,
     ) {
