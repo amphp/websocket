@@ -2,6 +2,7 @@
 
 namespace Amp\Websocket\Test;
 
+use Amp\ByteStream\ReadableBuffer;
 use Amp\ByteStream\ReadableIterableStream;
 use Amp\DeferredFuture;
 use Amp\Future;
@@ -433,8 +434,37 @@ class WebsocketClientTest extends AsyncTestCase
 
         $client = $this->createClient($socket, true);
 
-        foreach ($client as $key =>  $message) {
+        foreach ($client as $key => $message) {
             self::assertSame('message' . $key, $message->buffer());
         }
+    }
+
+    public function testClientDestroyed(): void
+    {
+        $chunk = \str_repeat('*', Rfc6455Client::DEFAULT_FRAME_SPLIT_THRESHOLD);
+
+        $future = async(fn () => delay(0.1));
+
+        $socket = $this->createSocket();
+        $socket->method('read')
+            ->willReturnCallback(fn () => $future->await());
+
+        $socket->expects(self::exactly(3))
+            ->method('write')
+            ->withConsecutive(...\array_map(fn (string $packet) => [$packet], [
+                compile(Opcode::Text, false, false, $chunk),
+                compile(Opcode::Continuation, false, true, $chunk),
+                compile(Opcode::Close, false, true, \pack('n', CloseCode::GOING_AWAY)),
+            ]));
+
+        $socket->expects(self::once())
+            ->method('close');
+
+        $client = $this->createClient($socket);
+        $client->stream(new ReadableBuffer(\str_repeat($chunk, 2)));
+
+        unset($client); // Should invoke destructor, send close frame, and close socket.
+
+        $future->await();
     }
 }
