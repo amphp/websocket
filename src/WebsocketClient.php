@@ -10,6 +10,9 @@ use Amp\Socket\TlsInfo;
 
 /**
  * @extends \Traversable<int, WebsocketMessage>
+ *
+ * @psalm-type Timestamp = int<0, max>
+ * @psalm-type Counter = int<0, max>
  */
 interface WebsocketClient extends Closable, \Traversable
 {
@@ -115,11 +118,15 @@ interface WebsocketClient extends Closable, \Traversable
 
     /**
      * Returns connection stat information for the passed enum case.
+     *
+     * @return int<0, max>
      */
     public function getStat(WebsocketClientStatKey $key): int;
 
     /**
      * Returns the most recent timestamp the given event was observed, or 0 if the event has not occurred.
+     *
+     * @return int<0, max>
      */
     public function getLastEventTime(WebsocketClientEventKey $key): int;
 

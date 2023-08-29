@@ -57,6 +57,9 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         $this->parser = $parserFactory->createParser($this, $masked, $compressionContext);
     }
 
+    /**
+     * @return ConcurrentIterator<WebsocketMessage>
+     */
     public function iterate(): ConcurrentIterator
     {
         return $this->messageQueue->iterate();
@@ -235,7 +238,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
                 // We need a min() here, else someone might just send a pong frame with a very high pong count and
                 // leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
-                $this->metadata->pongCount = \min($this->metadata->pingCount, (int) $data);
+                $this->metadata->pongCount = \min($this->metadata->pingCount, \max(0, (int) $data));
                 $this->metadata->lastHeartbeatAt = \time();
                 break;
 
