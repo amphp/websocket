@@ -2,8 +2,6 @@
 
 namespace Amp\Websocket\Internal;
 
-use Amp\Future;
-
 /** @internal */
 final class WebsocketClientMetadata
 {
