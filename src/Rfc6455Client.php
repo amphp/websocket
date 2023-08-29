@@ -73,7 +73,13 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
 
     public function __destruct()
     {
-        $this->close();
+        if ($this->metadata->isClosed()) {
+            return;
+        }
+
+        $frameHandler = $this->frameHandler;
+        $lastWrite = $this->lastWrite ?? Future::complete();
+        $lastWrite->finally(static fn () => $frameHandler->close(CloseCode::GOING_AWAY))->ignore();
     }
 
     public function receive(?Cancellation $cancellation = null): ?WebsocketMessage
