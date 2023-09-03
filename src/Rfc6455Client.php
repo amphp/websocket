@@ -105,11 +105,6 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         return $this->metadata->id;
     }
 
-    public function getUnansweredPingCount(): int
-    {
-        return $this->metadata->pingCount - $this->metadata->pongCount;
-    }
-
     public function getLocalAddress(): SocketAddress
     {
         return $this->socket->getLocalAddress();
@@ -156,6 +151,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
             WebsocketCount::MessagesSent => $this->metadata->messagesSent,
             WebsocketCount::PingCount => $this->metadata->pingCount,
             WebsocketCount::PongCount => $this->metadata->pongCount,
+            WebsocketCount::UnansweredPingCount => \max(0, $this->metadata->pingCount - $this->metadata->pongCount),
         };
     }
 

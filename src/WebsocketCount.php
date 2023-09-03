@@ -12,4 +12,5 @@ enum WebsocketCount
     case MessagesSent;
     case PingCount;
     case PongCount;
+    case UnansweredPingCount;
 }

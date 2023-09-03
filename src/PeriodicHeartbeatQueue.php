@@ -59,7 +59,7 @@ final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
                     continue;
                 }
 
-                if ($client->getUnansweredPingCount() > $queuedPingLimit) {
+                if ($client->getCount(WebsocketCount::UnansweredPingCount) > $queuedPingLimit) {
                     $this->remove($clientId);
                     async($client->close(...), WebsocketCloseCode::POLICY_VIOLATION, 'Exceeded unanswered PING limit')->ignore();
                     continue;

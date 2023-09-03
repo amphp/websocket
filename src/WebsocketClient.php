@@ -48,11 +48,6 @@ interface WebsocketClient extends Closable, \Traversable
     public function getTlsInfo(): ?TlsInfo;
 
     /**
-     * @return int Number of pings sent that have not been answered.
-     */
-    public function getUnansweredPingCount(): int;
-
-    /**
      * @return int|null Client close code (generally one of those listed in Code, though not necessarily) or `null`
      *      if the client has not closed.
      */
