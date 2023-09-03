@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-interface RateLimiter
+interface WebsocketRateLimit
 {
     /**
      * Notify the rate limiter of bytes received by the client. The rate limiter may suspend if it wishes to

@@ -19,9 +19,9 @@ use Amp\Websocket\Parser\ParserException;
 use Amp\Websocket\Parser\WebsocketFrameCompiler;
 use Amp\Websocket\Parser\WebsocketFrameHandler;
 use Amp\Websocket\Parser\WebsocketParser;
-use Amp\Websocket\RateLimiter;
 use Amp\Websocket\WebsocketFrameType;
 use Amp\Websocket\WebsocketMessage;
+use Amp\Websocket\WebsocketRateLimit;
 use function Amp\async;
 
 /** @internal */
@@ -42,7 +42,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         private readonly Socket $socket,
         private readonly WebsocketFrameCompiler $frameCompiler,
         private readonly ?HeartbeatQueue $heartbeatQueue,
-        private readonly ?RateLimiter $rateLimiter,
+        private readonly ?WebsocketRateLimit $rateLimit,
         private readonly WebsocketClientMetadata $metadata,
         private readonly float $closePeriod,
     ) {
@@ -70,7 +70,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                 $this->metadata->bytesRead += \strlen($chunk);
 
                 $this->heartbeatQueue?->update($this->metadata->id);
-                $this->rateLimiter?->notifyBytesReceived($this->metadata->id, \strlen($chunk));
+                $this->rateLimit?->notifyBytesReceived($this->metadata->id, \strlen($chunk));
 
                 $parser->push($chunk);
 
@@ -101,7 +101,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
     public function handleFrame(WebsocketFrameType $frameType, string $data, bool $isFinal): void
     {
         ++$this->metadata->framesRead;
-        $this->rateLimiter?->notifyFramesReceived($this->metadata->id, 1);
+        $this->rateLimit?->notifyFramesReceived($this->metadata->id, 1);
 
         if ($frameType->isControlFrame()) {
             $this->onControlFrame($frameType, $data);

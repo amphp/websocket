@@ -50,7 +50,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         WebsocketFrameCompilerFactory $compilerFactory = new Rfc6455FrameCompilerFactory(),
         ?CompressionContext $compressionContext = null,
         ?HeartbeatQueue $heartbeatQueue = null,
-        ?RateLimiter $rateLimiter = null,
+        ?WebsocketRateLimit $rateLimit = null,
         private readonly int $frameSplitThreshold = self::DEFAULT_FRAME_SPLIT_THRESHOLD,
         float $closePeriod = self::DEFAULT_CLOSE_PERIOD,
     ) {
@@ -60,7 +60,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
             socket: $this->socket,
             frameCompiler: $compilerFactory->createFrameCompiler($masked, $compressionContext),
             heartbeatQueue: $heartbeatQueue,
-            rateLimiter: $rateLimiter,
+            rateLimit: $rateLimit,
             metadata: $this->metadata,
             closePeriod: $closePeriod,
         );

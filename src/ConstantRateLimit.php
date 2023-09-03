@@ -8,7 +8,7 @@ use Revolt\EventLoop;
 use Revolt\EventLoop\Suspension;
 use function Amp\weakClosure;
 
-final class DefaultRateLimiter implements RateLimiter
+final class ConstantRateLimit implements WebsocketRateLimit
 {
     use ForbidCloning;
     use ForbidSerialization;
