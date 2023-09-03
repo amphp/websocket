@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket\Compression;
 
-interface CompressionContext
+interface WebsocketCompressionContext
 {
     /**
      * @return int The RSV value for this compression extension.

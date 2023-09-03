@@ -5,7 +5,7 @@ namespace Amp\Websocket\Parser;
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
 use Amp\Parser\Parser;
-use Amp\Websocket\Compression\CompressionContext;
+use Amp\Websocket\Compression\WebsocketCompressionContext;
 use Amp\Websocket\WebsocketCloseCode;
 use Amp\Websocket\WebsocketFrameType;
 
@@ -24,7 +24,7 @@ final class Rfc6455Parser implements WebsocketParser
     public function __construct(
         WebsocketFrameHandler $frameHandler,
         private readonly bool $masked,
-        private readonly ?CompressionContext $compressionContext = null,
+        private readonly ?WebsocketCompressionContext $compressionContext = null,
         bool $textOnly = self::DEFAULT_TEXT_ONLY,
         bool $validateUtf8 = self::DEFAULT_VALIDATE_UTF8,
         int $messageSizeLimit = self::DEFAULT_MESSAGE_SIZE_LIMIT,
@@ -61,7 +61,7 @@ final class Rfc6455Parser implements WebsocketParser
     private static function parse(
         WebsocketFrameHandler $frameHandler,
         bool $masked,
-        ?CompressionContext $compressionContext,
+        ?WebsocketCompressionContext $compressionContext,
         bool $textOnly,
         bool $validateUtf8,
         int $messageSizeLimit,

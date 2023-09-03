@@ -4,7 +4,7 @@ namespace Amp\Websocket\Parser;
 
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
-use Amp\Websocket\Compression\CompressionContext;
+use Amp\Websocket\Compression\WebsocketCompressionContext;
 
 final class Rfc6455ParserFactory implements WebsocketParserFactory
 {
@@ -22,7 +22,7 @@ final class Rfc6455ParserFactory implements WebsocketParserFactory
     public function createParser(
         WebsocketFrameHandler $frameHandler,
         bool $masked,
-        ?CompressionContext $compressionContext = null,
+        ?WebsocketCompressionContext $compressionContext = null,
     ): Rfc6455Parser {
         return new Rfc6455Parser(
             $frameHandler,

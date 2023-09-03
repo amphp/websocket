@@ -4,7 +4,7 @@ namespace Amp\Websocket\Parser;
 
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
-use Amp\Websocket\Compression\CompressionContext;
+use Amp\Websocket\Compression\WebsocketCompressionContext;
 use Amp\Websocket\WebsocketFrameType;
 
 final class Rfc6455FrameCompiler implements WebsocketFrameCompiler
@@ -18,7 +18,7 @@ final class Rfc6455FrameCompiler implements WebsocketFrameCompiler
 
     public function __construct(
         private readonly bool $masked,
-        private readonly ?CompressionContext $compressionContext = null,
+        private readonly ?WebsocketCompressionContext $compressionContext = null,
     ) {
     }
 

@@ -4,7 +4,7 @@ namespace Amp\Websocket\Parser;
 
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
-use Amp\Websocket\Compression\CompressionContext;
+use Amp\Websocket\Compression\WebsocketCompressionContext;
 
 final class Rfc6455FrameCompilerFactory implements WebsocketFrameCompilerFactory
 {
@@ -13,7 +13,7 @@ final class Rfc6455FrameCompilerFactory implements WebsocketFrameCompilerFactory
 
     public function createFrameCompiler(
         bool $masked,
-        ?CompressionContext $compressionContext = null,
+        ?WebsocketCompressionContext $compressionContext = null,
     ): Rfc6455FrameCompiler {
         return new Rfc6455FrameCompiler($masked, $compressionContext);
     }

@@ -5,7 +5,7 @@ namespace Amp\Websocket\Compression;
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
 
-final class Rfc7692Compression implements CompressionContext
+final class Rfc7692Compression implements WebsocketCompressionContext
 {
     use ForbidCloning;
     use ForbidSerialization;

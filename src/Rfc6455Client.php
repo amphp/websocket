@@ -13,7 +13,7 @@ use Amp\Pipeline\ConcurrentIterator;
 use Amp\Socket\Socket;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
-use Amp\Websocket\Compression\CompressionContext;
+use Amp\Websocket\Compression\WebsocketCompressionContext;
 use Amp\Websocket\Parser\Rfc6455FrameCompilerFactory;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Parser\WebsocketFrameCompilerFactory;
@@ -48,7 +48,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         bool $masked,
         WebsocketParserFactory $parserFactory = new Rfc6455ParserFactory(),
         WebsocketFrameCompilerFactory $compilerFactory = new Rfc6455FrameCompilerFactory(),
-        ?CompressionContext $compressionContext = null,
+        ?WebsocketCompressionContext $compressionContext = null,
         ?WebsocketHeartbeatQueue $heartbeatQueue = null,
         ?WebsocketRateLimit $rateLimit = null,
         private readonly int $frameSplitThreshold = self::DEFAULT_FRAME_SPLIT_THRESHOLD,

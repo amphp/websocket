@@ -5,17 +5,17 @@ namespace Amp\Websocket\Compression;
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
 
-final class Rfc7692CompressionFactory implements CompressionContextFactory
+final class Rfc7692CompressionFactory implements WebsocketCompressionContextFactory
 {
     use ForbidCloning;
     use ForbidSerialization;
 
-    public function fromClientHeader(string $headerIn, ?string &$headerOut): ?CompressionContext
+    public function fromClientHeader(string $headerIn, ?string &$headerOut): ?WebsocketCompressionContext
     {
         return Rfc7692Compression::fromClientHeader($headerIn, $headerOut);
     }
 
-    public function fromServerHeader(string $header): ?CompressionContext
+    public function fromServerHeader(string $header): ?WebsocketCompressionContext
     {
         return Rfc7692Compression::fromServerHeader($header);
     }
