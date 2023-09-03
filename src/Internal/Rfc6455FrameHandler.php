@@ -67,7 +67,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                 }
 
                 $this->metadata->lastReadAt = \time();
-                $this->metadata->bytesRead += \strlen($chunk);
+                $this->metadata->bytesReceived += \strlen($chunk);
 
                 $this->heartbeatQueue?->update($this->metadata->id);
                 $this->rateLimit?->notifyBytesReceived($this->metadata->id, \strlen($chunk));
@@ -100,7 +100,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
     public function handleFrame(WebsocketFrameType $frameType, string $data, bool $isFinal): void
     {
-        ++$this->metadata->framesRead;
+        ++$this->metadata->framesReceived;
         $this->rateLimit?->notifyFramesReceived($this->metadata->id, 1);
 
         if ($frameType->isControlFrame()) {
@@ -130,7 +130,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                 return;
             }
 
-            ++$this->metadata->messagesRead;
+            ++$this->metadata->messagesReceived;
 
             if (!$terminated) {
                 $this->currentMessageQueue = new Queue();
@@ -220,7 +220,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                 break;
 
             case WebsocketFrameType::Ping:
-                ++$this->metadata->pingsRead;
+                ++$this->metadata->pingsReceived;
                 $this->write(WebsocketFrameType::Pong, $data);
                 ++$this->metadata->pongsSent;
                 break;
@@ -233,7 +233,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
                 // We need a min() here, else someone might just send a pong frame with a very high pong count and
                 // leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
-                $this->metadata->pongsRead = \min($this->metadata->pingsSent, \max(0, (int) $data));
+                $this->metadata->pongsReceived = \min($this->metadata->pingsSent, \max(0, (int) $data));
                 $this->metadata->lastHeartbeatAt = \time();
                 break;
 

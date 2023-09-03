@@ -4,15 +4,15 @@ namespace Amp\Websocket;
 
 enum WebsocketCount
 {
-    case BytesRead;
+    case BytesReceived;
     case BytesSent;
-    case FramesRead;
+    case FramesReceived;
     case FramesSent;
-    case MessagesRead;
+    case MessagesReceived;
     case MessagesSent;
-    case PingsRead;
+    case PingsReceived;
     case PingsSent;
-    case PongsRead;
+    case PongsReceived;
     case PongsSent;
     case UnansweredPings;
 }

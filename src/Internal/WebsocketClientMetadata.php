@@ -39,31 +39,31 @@ final class WebsocketClientMetadata
     public int $lastHeartbeatAt = 0;
 
     /** @var int<0, max> */
-    public int $bytesRead = 0;
+    public int $bytesReceived = 0;
 
     /** @var int<0, max> */
     public int $bytesSent = 0;
 
     /** @var int<0, max> */
-    public int $framesRead = 0;
+    public int $framesReceived = 0;
 
     /** @var int<0, max> */
     public int $framesSent = 0;
 
     /** @var int<0, max> */
-    public int $messagesRead = 0;
+    public int $messagesReceived = 0;
 
     /** @var int<0, max> */
     public int $messagesSent = 0;
 
     /** @var int<0, max> */
-    public int $pingsRead = 0;
+    public int $pingsReceived = 0;
 
     /** @var int<0, max> */
     public int $pingsSent = 0;
 
     /** @var int<0, max> */
-    public int $pongsRead = 0;
+    public int $pongsReceived = 0;
 
     /** @var int<0, max> */
     public int $pongsSent = 0;

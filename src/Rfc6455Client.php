@@ -143,17 +143,17 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
     public function getCount(WebsocketCount $type): int
     {
         return match ($type) {
-            WebsocketCount::BytesRead => $this->metadata->bytesRead,
+            WebsocketCount::BytesReceived => $this->metadata->bytesReceived,
             WebsocketCount::BytesSent => $this->metadata->bytesSent,
-            WebsocketCount::FramesRead => $this->metadata->framesRead,
+            WebsocketCount::FramesReceived => $this->metadata->framesReceived,
             WebsocketCount::FramesSent => $this->metadata->framesSent,
-            WebsocketCount::MessagesRead => $this->metadata->messagesRead,
+            WebsocketCount::MessagesReceived => $this->metadata->messagesReceived,
             WebsocketCount::MessagesSent => $this->metadata->messagesSent,
-            WebsocketCount::PingsRead => $this->metadata->pingsRead,
+            WebsocketCount::PingsReceived => $this->metadata->pingsReceived,
             WebsocketCount::PingsSent => $this->metadata->pingsSent,
-            WebsocketCount::PongsRead => $this->metadata->pongsRead,
+            WebsocketCount::PongsReceived => $this->metadata->pongsReceived,
             WebsocketCount::PongsSent => $this->metadata->pongsSent,
-            WebsocketCount::UnansweredPings => \max(0, $this->metadata->pingsSent - $this->metadata->pongsRead),
+            WebsocketCount::UnansweredPings => \max(0, $this->metadata->pingsSent - $this->metadata->pongsReceived),
         };
     }
 
