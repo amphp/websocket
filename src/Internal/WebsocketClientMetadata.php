@@ -17,15 +17,15 @@ final class WebsocketClientMetadata
 
     public readonly float $connectedAt;
 
-    public float $lastReadAt = 0;
+    public float $lastReadAt = \NAN;
 
-    public float $lastSentAt = 0;
+    public float $lastSentAt = \NAN;
 
-    public float $lastDataReadAt = 0;
+    public float $lastDataReadAt = \NAN;
 
-    public float $lastDataSentAt = 0;
+    public float $lastDataSentAt = \NAN;
 
-    public float $lastHeartbeatAt = 0;
+    public float $lastHeartbeatAt = \NAN;
 
     /** @var int<0, max> */
     public int $bytesReceived = 0;

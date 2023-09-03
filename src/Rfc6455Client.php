@@ -155,7 +155,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
     {
         return match ($type) {
             WebsocketTimestamp::Connected => $this->metadata->connectedAt,
-            WebsocketTimestamp::Closed => $this->metadata->closeInfo?->getTimestamp() ?? 0,
+            WebsocketTimestamp::Closed => $this->metadata->closeInfo?->getTimestamp() ?? \NAN,
             WebsocketTimestamp::LastRead => $this->metadata->lastReadAt,
             WebsocketTimestamp::LastSend => $this->metadata->lastSentAt,
             WebsocketTimestamp::LastDataRead => $this->metadata->lastDataReadAt,

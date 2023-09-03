@@ -106,7 +106,7 @@ interface WebsocketClient extends Closable, \Traversable
 
     /**
      * Returns the most recent unix timestamp (including fractions of a second) the given event enum case was observed,
-     * or 0 if the event has not occurred.
+     * or {@see \NAN} if the event has not occurred.
      *
      */
     public function getTimestamp(WebsocketTimestamp $type): float;
