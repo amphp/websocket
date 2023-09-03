@@ -172,7 +172,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         };
     }
 
-    public function send(string $data): void
+    public function sendText(string $data): void
     {
         \assert((bool) \preg_match('//u', $data), 'Text data must be UTF-8');
         $this->pushData(Opcode::Text, $data);
@@ -183,7 +183,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         $this->pushData(Opcode::Binary, $data);
     }
 
-    public function stream(ReadableStream $stream): void
+    public function streamText(ReadableStream $stream): void
     {
         $this->pushStream(Opcode::Text, $stream);
     }

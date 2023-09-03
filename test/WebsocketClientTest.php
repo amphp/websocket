@@ -164,7 +164,7 @@ class WebsocketClientTest extends AsyncTestCase
 
         $client = $this->createClient($socket);
 
-        $client->send('data');
+        $client->sendText('data');
 
         $client->close();
     }
@@ -187,7 +187,7 @@ class WebsocketClientTest extends AsyncTestCase
 
         $client = $this->createClient($socket, frameSplitThreshold: 6);
 
-        $client->send('chunk1chunk2chunk3end');
+        $client->sendText('chunk1chunk2chunk3end');
     }
 
     public function testSendBinary(): void
@@ -228,7 +228,7 @@ class WebsocketClientTest extends AsyncTestCase
 
         $stream = new ReadableIterableStream($emitter->pipe());
 
-        $client->stream($stream);
+        $client->streamText($stream);
 
         $client->close();
     }
@@ -260,7 +260,7 @@ class WebsocketClientTest extends AsyncTestCase
 
         $stream = new ReadableIterableStream($emitter->pipe());
 
-        $client->stream($stream);
+        $client->streamText($stream);
     }
 
     public function testSendWithFailedSocket(): void
@@ -278,7 +278,7 @@ class WebsocketClientTest extends AsyncTestCase
         $this->expectException(ClosedException::class);
         $this->expectExceptionMessage('Writing to the client failed');
 
-        $client->send('data');
+        $client->sendText('data');
     }
 
     public function testStreamWithFailedSocket(): void
@@ -306,7 +306,7 @@ class WebsocketClientTest extends AsyncTestCase
         $this->expectException(ClosedException::class);
         $this->expectExceptionMessage('Writing to the client failed');
 
-        $client->stream($stream);
+        $client->streamText($stream);
     }
 
     public function testStreamWithFailedStream(): void
@@ -321,7 +321,7 @@ class WebsocketClientTest extends AsyncTestCase
 
         $this->expectExceptionObject($exception);
 
-        $client->stream(new ReadableIterableStream($emitter->pipe()));
+        $client->streamText(new ReadableIterableStream($emitter->pipe()));
     }
 
     public function testReceiveWhenSocketCloses(): void
@@ -461,7 +461,7 @@ class WebsocketClientTest extends AsyncTestCase
             ->method('close');
 
         $client = $this->createClient($socket);
-        $client->stream(new ReadableBuffer(\str_repeat($chunk, 2)));
+        $client->streamText(new ReadableBuffer(\str_repeat($chunk, 2)));
 
         unset($client); // Should invoke destructor, send close frame, and close socket.
 

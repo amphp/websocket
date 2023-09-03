@@ -84,7 +84,7 @@ interface WebsocketClient extends Closable, \Traversable
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function send(string $data): void;
+    public function sendText(string $data): void;
 
     /**
      * Sends a binary message to the endpoint.
@@ -101,7 +101,7 @@ interface WebsocketClient extends Closable, \Traversable
      *
      * @throws ClosedException Thrown if sending to the client fails.
      */
-    public function stream(ReadableStream $stream): void;
+    public function streamText(ReadableStream $stream): void;
 
     /**
      * Streams the given binary to the endpoint. This method should be used only for large payloads such as
