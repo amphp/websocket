@@ -1,4 +1,4 @@
-# websocket
+# amphp/websocket
 
 AMPHP is a collection of event-driven libraries for PHP designed with fibers and concurrency in mind. `amphp/websocket` contains basic websocket components shared by our [Websocket Server](https://github.com/amphp/websocket-server) and [Websocket Client](https://github.com/amphp/websocket-client) packages.
 
