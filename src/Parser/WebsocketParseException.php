@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket\Parser;
 
-final class ParserException extends \Exception
+final class WebsocketParseException extends \Exception
 {
     public function __construct(int $code, string $message)
     {

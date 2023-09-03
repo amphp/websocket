@@ -12,9 +12,9 @@ use Amp\Pipeline\DisposedException;
 use Amp\Pipeline\Queue;
 use Amp\Socket\Socket;
 use Amp\TimeoutCancellation;
-use Amp\Websocket\Parser\ParserException;
 use Amp\Websocket\Parser\WebsocketFrameCompiler;
 use Amp\Websocket\Parser\WebsocketFrameHandler;
+use Amp\Websocket\Parser\WebsocketParseException;
 use Amp\Websocket\Parser\WebsocketParser;
 use Amp\Websocket\WebsocketCloseCode;
 use Amp\Websocket\WebsocketClosedException;
@@ -76,7 +76,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
                 $chunk = ''; // Free memory from last chunk read.
             }
-        } catch (ParserException $exception) {
+        } catch (WebsocketParseException $exception) {
             $message = $exception->getMessage();
             $code = $exception->getCode();
         } catch (\Throwable $exception) {

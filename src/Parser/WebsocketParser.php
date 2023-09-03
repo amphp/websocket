@@ -7,7 +7,7 @@ interface WebsocketParser
     /**
      * Parse websocket frames from peer data, invoking {@see WebsocketFrameHandler::handleFrame()} for each frame.
      *
-     * @throws ParserException
+     * @throws WebsocketParseException
      */
     public function push(string $data): void;
 
