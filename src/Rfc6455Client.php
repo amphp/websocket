@@ -149,9 +149,11 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
             WebsocketCount::FramesSent => $this->metadata->framesSent,
             WebsocketCount::MessagesRead => $this->metadata->messagesRead,
             WebsocketCount::MessagesSent => $this->metadata->messagesSent,
-            WebsocketCount::Pings => $this->metadata->pingCount,
-            WebsocketCount::Pongs => $this->metadata->pongCount,
-            WebsocketCount::UnansweredPings => \max(0, $this->metadata->pingCount - $this->metadata->pongCount),
+            WebsocketCount::PingsRead => $this->metadata->pingsRead,
+            WebsocketCount::PingsSent => $this->metadata->pingsSent,
+            WebsocketCount::PongsRead => $this->metadata->pongsRead,
+            WebsocketCount::PongsSent => $this->metadata->pongsSent,
+            WebsocketCount::UnansweredPings => \max(0, $this->metadata->pingsSent - $this->metadata->pongsRead),
         };
     }
 
@@ -191,8 +193,8 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
 
     public function ping(): void
     {
-        ++$this->metadata->pingCount;
-        $this->frameHandler->write(WebsocketFrameType::Ping, (string) $this->metadata->pingCount);
+        ++$this->metadata->pingsSent;
+        $this->frameHandler->write(WebsocketFrameType::Ping, (string) $this->metadata->pingsSent);
     }
 
     private function pushData(WebsocketFrameType $frameType, string $data): void

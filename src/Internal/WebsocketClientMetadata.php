@@ -57,10 +57,16 @@ final class WebsocketClientMetadata
     public int $messagesSent = 0;
 
     /** @var int<0, max> */
-    public int $pingCount = 0;
+    public int $pingsRead = 0;
 
     /** @var int<0, max> */
-    public int $pongCount = 0;
+    public int $pingsSent = 0;
+
+    /** @var int<0, max> */
+    public int $pongsRead = 0;
+
+    /** @var int<0, max> */
+    public int $pongsSent = 0;
 
     public function __construct(
         public readonly bool $compressionEnabled,

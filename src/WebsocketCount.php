@@ -10,7 +10,9 @@ enum WebsocketCount
     case FramesSent;
     case MessagesRead;
     case MessagesSent;
-    case Pings;
-    case Pongs;
+    case PingsRead;
+    case PingsSent;
+    case PongsRead;
+    case PongsSent;
     case UnansweredPings;
 }
