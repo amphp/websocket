@@ -5,7 +5,6 @@ namespace Amp\Websocket\Parser;
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
 use Amp\Websocket\Compression\WebsocketCompressionContext;
-use Amp\Websocket\WebsocketFrameType;
 
 final class Rfc6455FrameCompiler implements WebsocketFrameCompiler
 {

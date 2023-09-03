@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket\Test;
 
-use Amp\Websocket\WebsocketFrameType;
+use Amp\Websocket\Parser\WebsocketFrameType;
 
 // 4-byte "random" mask
 const MASK = "\xF4\x37\x7A\x9C";

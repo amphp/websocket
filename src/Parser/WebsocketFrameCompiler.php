@@ -2,8 +2,6 @@
 
 namespace Amp\Websocket\Parser;
 
-use Amp\Websocket\WebsocketFrameType;
-
 interface WebsocketFrameCompiler
 {
     /**

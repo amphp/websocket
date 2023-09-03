@@ -17,6 +17,7 @@ use Amp\Websocket\Compression\WebsocketCompressionContext;
 use Amp\Websocket\Parser\Rfc6455FrameCompilerFactory;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Parser\WebsocketFrameCompilerFactory;
+use Amp\Websocket\Parser\WebsocketFrameType;
 use Amp\Websocket\Parser\WebsocketParserFactory;
 use Revolt\EventLoop;
 

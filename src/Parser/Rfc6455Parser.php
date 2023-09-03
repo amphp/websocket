@@ -7,7 +7,6 @@ use Amp\ForbidSerialization;
 use Amp\Parser\Parser;
 use Amp\Websocket\Compression\WebsocketCompressionContext;
 use Amp\Websocket\WebsocketCloseCode;
-use Amp\Websocket\WebsocketFrameType;
 
 final class Rfc6455Parser implements WebsocketParser
 {
