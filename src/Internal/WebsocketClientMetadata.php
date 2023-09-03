@@ -19,9 +19,6 @@ final class WebsocketClientMetadata
     public readonly int $connectedAt;
 
     /** @var int<0, max> */
-    public int $closedAt = 0;
-
-    /** @var int<0, max> */
     public int $lastReadAt = 0;
 
     /** @var int<0, max> */

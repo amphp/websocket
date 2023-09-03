@@ -261,7 +261,6 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
         \assert($code !== WebsocketCloseCode::NONE || $reason === '');
 
-        $this->metadata->closedAt = \time();
         $this->metadata->closeInfo = new WebsocketCloseInfo(
             $code,
             $reason,
