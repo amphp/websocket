@@ -4,6 +4,9 @@ namespace Amp\Websocket;
 
 final class WebsocketCloseInfo
 {
+    /**
+     * @param int<0, max> $timestamp
+     */
     public function __construct(
         private readonly int $code,
         private readonly string $reason,
@@ -13,7 +16,7 @@ final class WebsocketCloseInfo
     }
 
     /**
-     * @return int Unix timestamp at which the connection was closed.
+     * @return int<0, max> Unix timestamp at which the connection was closed.
      */
     public function getTimestamp(): int
     {
