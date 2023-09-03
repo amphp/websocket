@@ -149,9 +149,9 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
             WebsocketCount::FramesSent => $this->metadata->framesSent,
             WebsocketCount::MessagesRead => $this->metadata->messagesRead,
             WebsocketCount::MessagesSent => $this->metadata->messagesSent,
-            WebsocketCount::PingCount => $this->metadata->pingCount,
-            WebsocketCount::PongCount => $this->metadata->pongCount,
-            WebsocketCount::UnansweredPingCount => \max(0, $this->metadata->pingCount - $this->metadata->pongCount),
+            WebsocketCount::Pings => $this->metadata->pingCount,
+            WebsocketCount::Pongs => $this->metadata->pongCount,
+            WebsocketCount::UnansweredPings => \max(0, $this->metadata->pingCount - $this->metadata->pongCount),
         };
     }
 
