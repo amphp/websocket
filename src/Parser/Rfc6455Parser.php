@@ -5,8 +5,8 @@ namespace Amp\Websocket\Parser;
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
 use Amp\Parser\Parser;
-use Amp\Websocket\CloseCode;
 use Amp\Websocket\Compression\CompressionContext;
+use Amp\Websocket\WebsocketCloseCode;
 use Amp\Websocket\WebsocketFrameType;
 
 final class Rfc6455Parser implements WebsocketParser
@@ -90,16 +90,16 @@ final class Rfc6455Parser implements WebsocketParser
             $frameLength = $secondByte & 0b01111111;
 
             if ($opcode >= 3 && $opcode <= 7) {
-                throw new ParserException(CloseCode::PROTOCOL_ERROR, 'Use of reserved non-control frame opcode');
+                throw new ParserException(WebsocketCloseCode::PROTOCOL_ERROR, 'Use of reserved non-control frame opcode');
             }
 
             if ($opcode >= 11 && $opcode <= 15) {
-                throw new ParserException(CloseCode::PROTOCOL_ERROR, 'Use of reserved control frame opcode');
+                throw new ParserException(WebsocketCloseCode::PROTOCOL_ERROR, 'Use of reserved control frame opcode');
             }
 
             $frameType = WebsocketFrameType::tryFrom($opcode);
             if (!$frameType) {
-                throw new ParserException(CloseCode::PROTOCOL_ERROR, 'Invalid opcode');
+                throw new ParserException(WebsocketCloseCode::PROTOCOL_ERROR, 'Invalid opcode');
             }
 
             $isControlFrame = $frameType->isControlFrame();
@@ -107,14 +107,14 @@ final class Rfc6455Parser implements WebsocketParser
             if ($isControlFrame || $frameType === WebsocketFrameType::Continuation) { // Control and continuation frames
                 if ($rsv !== 0) {
                     throw new ParserException(
-                        CloseCode::PROTOCOL_ERROR,
+                        WebsocketCloseCode::PROTOCOL_ERROR,
                         'RSV must be 0 for control or continuation frames',
                     );
                 }
             } else { // Text and binary frames
                 if ($rsv !== 0 && (!$compressionContext || $rsv & ~$compressedFlag)) {
                     throw new ParserException(
-                        CloseCode::PROTOCOL_ERROR,
+                        WebsocketCloseCode::PROTOCOL_ERROR,
                         'Invalid RSV value for negotiated extensions',
                     );
                 }
@@ -131,7 +131,7 @@ final class Rfc6455Parser implements WebsocketParser
                 if (\PHP_INT_MAX === 0x7fffffff) {
                     if ($highBytes !== 0 || $lowBytes < 0) {
                         throw new ParserException(
-                            CloseCode::MESSAGE_TOO_LARGE,
+                            WebsocketCloseCode::MESSAGE_TOO_LARGE,
                             'Received payload exceeds maximum allowable size'
                         );
                     }
@@ -140,7 +140,7 @@ final class Rfc6455Parser implements WebsocketParser
                     $frameLength = ($highBytes << 32) | $lowBytes;
                     if ($frameLength < 0) {
                         throw new ParserException(
-                            CloseCode::PROTOCOL_ERROR,
+                            WebsocketCloseCode::PROTOCOL_ERROR,
                             'Most significant bit of 64-bit length field set'
                         );
                     }
@@ -149,7 +149,7 @@ final class Rfc6455Parser implements WebsocketParser
 
             if ($frameLength > 0 && $isMasked === $masked) {
                 throw new ParserException(
-                    CloseCode::PROTOCOL_ERROR,
+                    WebsocketCloseCode::PROTOCOL_ERROR,
                     'Payload mask error'
                 );
             }
@@ -157,14 +157,14 @@ final class Rfc6455Parser implements WebsocketParser
             if ($isControlFrame) {
                 if (!$final) {
                     throw new ParserException(
-                        CloseCode::PROTOCOL_ERROR,
+                        WebsocketCloseCode::PROTOCOL_ERROR,
                         'Illegal control frame fragmentation'
                     );
                 }
 
                 if ($frameLength > 125) {
                     throw new ParserException(
-                        CloseCode::PROTOCOL_ERROR,
+                        WebsocketCloseCode::PROTOCOL_ERROR,
                         'Control frame payload must be of maximum 125 bytes or less'
                     );
                 }
@@ -172,14 +172,14 @@ final class Rfc6455Parser implements WebsocketParser
 
             if ($frameSizeLimit && $frameLength > $frameSizeLimit) {
                 throw new ParserException(
-                    CloseCode::MESSAGE_TOO_LARGE,
+                    WebsocketCloseCode::MESSAGE_TOO_LARGE,
                     'Received payload exceeds maximum allowable size'
                 );
             }
 
             if ($messageSizeLimit && ($frameLength + $dataMsgBytesRecd) > $messageSizeLimit) {
                 throw new ParserException(
-                    CloseCode::MESSAGE_TOO_LARGE,
+                    WebsocketCloseCode::MESSAGE_TOO_LARGE,
                     'Received payload exceeds maximum allowable size'
                 );
             }
@@ -206,7 +206,7 @@ final class Rfc6455Parser implements WebsocketParser
 
             if ($textOnly && $frameType === WebsocketFrameType::Binary) {
                 throw new ParserException(
-                    CloseCode::UNACCEPTABLE_TYPE,
+                    WebsocketCloseCode::UNACCEPTABLE_TYPE,
                     'BINARY opcodes (0x02) not accepted'
                 );
             }
@@ -224,7 +224,7 @@ final class Rfc6455Parser implements WebsocketParser
 
                 if ($payload === null) { // Decompression failed.
                     throw new ParserException(
-                        CloseCode::PROTOCOL_ERROR,
+                        WebsocketCloseCode::PROTOCOL_ERROR,
                         'Invalid compressed data'
                     );
                 }
@@ -247,7 +247,7 @@ final class Rfc6455Parser implements WebsocketParser
                 /** @psalm-suppress PossiblyUndefinedVariable Defined in either condition above. */
                 if (!$valid) {
                     throw new ParserException(
-                        CloseCode::INCONSISTENT_FRAME_DATA_TYPE,
+                        WebsocketCloseCode::INCONSISTENT_FRAME_DATA_TYPE,
                         'Invalid TEXT data; UTF-8 required'
                     );
                 }

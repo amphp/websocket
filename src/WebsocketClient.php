@@ -82,7 +82,7 @@ interface WebsocketClient extends Closable, \Traversable
      *
      * @param string $data Payload to send.
      *
-     * @throws ClosedException Thrown if sending to the client fails.
+     * @throws WebsocketClosedException Thrown if sending to the client fails.
      */
     public function sendText(string $data): void;
 
@@ -91,7 +91,7 @@ interface WebsocketClient extends Closable, \Traversable
      *
      * @param string $data Payload to send.
      *
-     * @throws ClosedException Thrown if sending to the client fails.
+     * @throws WebsocketClosedException Thrown if sending to the client fails.
      */
     public function sendBinary(string $data): void;
 
@@ -99,7 +99,7 @@ interface WebsocketClient extends Closable, \Traversable
      * Streams the given UTF-8 text stream to the endpoint. This method should be used only for large payloads such as
      * files. Use send() for smaller payloads.
      *
-     * @throws ClosedException Thrown if sending to the client fails.
+     * @throws WebsocketClosedException Thrown if sending to the client fails.
      */
     public function streamText(ReadableStream $stream): void;
 
@@ -107,7 +107,7 @@ interface WebsocketClient extends Closable, \Traversable
      * Streams the given binary to the endpoint. This method should be used only for large payloads such as
      * files. Use sendBinary() for smaller payloads.
      *
-     * @throws ClosedException Thrown if sending to the client fails.
+     * @throws WebsocketClosedException Thrown if sending to the client fails.
      */
     public function streamBinary(ReadableStream $stream): void;
 
@@ -139,7 +139,7 @@ interface WebsocketClient extends Closable, \Traversable
     /**
      * Closes the client connection.
      */
-    public function close(int $code = CloseCode::NORMAL_CLOSE, string $reason = ''): void;
+    public function close(int $code = WebsocketCloseCode::NORMAL_CLOSE, string $reason = ''): void;
 
     /**
      * Attaches a callback invoked when the client closes. The callback is passed this client as the only parameter.

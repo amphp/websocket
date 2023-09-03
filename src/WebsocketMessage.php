@@ -69,7 +69,7 @@ final class WebsocketMessage implements ReadableStream, \IteratorAggregate
 
     /**
      * @throws StreamException
-     * @throws ClosedException
+     * @throws WebsocketClosedException
      */
     public function read(?Cancellation $cancellation = null): ?string
     {
@@ -80,10 +80,10 @@ final class WebsocketMessage implements ReadableStream, \IteratorAggregate
      * Buffer the entire message contents. Note that the given size limit may not be reached if a smaller message size
      * limit has been imposed by {@see Rfc6455Client::$messageSizeLimit}.
      *
-     * @see Payload::buffer()
-     *
      * @throws BufferException|StreamException
-     * @throws ClosedException
+     * @throws WebsocketClosedException
+     *@see Payload::buffer()
+     *
      */
     public function buffer(?Cancellation $cancellation = null, int $limit = \PHP_INT_MAX): string
     {

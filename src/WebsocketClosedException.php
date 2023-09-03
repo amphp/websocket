@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-final class ClosedException extends WebsocketException
+final class WebsocketClosedException extends WebsocketException
 {
     private readonly string $reason;
 
@@ -12,7 +12,7 @@ final class ClosedException extends WebsocketException
             '%s; Code %s (%s); Reason: "%s"',
             $message,
             $code,
-            CloseCode::getName($code) ?? 'Unknown code',
+            WebsocketCloseCode::getName($code) ?? 'Unknown code',
             $reason,
         ), $code, $previous);
 

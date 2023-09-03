@@ -83,7 +83,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
 
         $frameHandler = $this->frameHandler;
         $lastWrite = $this->lastWrite ?? Future::complete();
-        $lastWrite->finally(static fn () => $frameHandler->close(CloseCode::GOING_AWAY))->ignore();
+        $lastWrite->finally(static fn () => $frameHandler->close(WebsocketCloseCode::GOING_AWAY))->ignore();
     }
 
     public function receive(?Cancellation $cancellation = null): ?WebsocketMessage
@@ -219,10 +219,10 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         try {
             $this->frameHandler->write($frameType, $data);
         } catch (\Throwable $exception) {
-            $code = CloseCode::ABNORMAL_CLOSE;
+            $code = WebsocketCloseCode::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
             $this->close($code, $reason);
-            throw new ClosedException('Client unexpectedly closed', $code, $reason, $exception);
+            throw new WebsocketClosedException('Client unexpectedly closed', $code, $reason, $exception);
         }
     }
 
@@ -291,12 +291,12 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
                 $frameType = WebsocketFrameType::Continuation;
             } while ($chunk !== null);
         } catch (StreamException $exception) {
-            $code = CloseCode::ABNORMAL_CLOSE;
+            $code = WebsocketCloseCode::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
             $this->close($code, $reason);
-            throw new ClosedException('Client unexpectedly closed', $code, $reason, $exception);
+            throw new WebsocketClosedException('Client unexpectedly closed', $code, $reason, $exception);
         } catch (\Throwable $exception) {
-            $this->close(CloseCode::UNEXPECTED_SERVER_ERROR, 'Error while reading message data');
+            $this->close(WebsocketCloseCode::UNEXPECTED_SERVER_ERROR, 'Error while reading message data');
             throw $exception;
         }
     }
@@ -306,7 +306,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         return $this->metadata->isClosed();
     }
 
-    public function close(int $code = CloseCode::NORMAL_CLOSE, string $reason = ''): void
+    public function close(int $code = WebsocketCloseCode::NORMAL_CLOSE, string $reason = ''): void
     {
         $this->frameHandler->close($code, $reason);
         $this->lastWrite = null;
@@ -317,7 +317,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         $metadata = $this->metadata;
         $this->socket->onClose(static fn () => $onClose(
             $metadata->id,
-            $metadata->closeCode ?? CloseCode::ABNORMAL_CLOSE,
+            $metadata->closeCode ?? WebsocketCloseCode::ABNORMAL_CLOSE,
             $metadata->closeReason ?? 'Connection closed unexpectedly',
             $metadata->closedByPeer,
         ));

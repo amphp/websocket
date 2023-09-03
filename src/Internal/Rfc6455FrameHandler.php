@@ -12,12 +12,12 @@ use Amp\Pipeline\DisposedException;
 use Amp\Pipeline\Queue;
 use Amp\Socket\Socket;
 use Amp\TimeoutCancellation;
-use Amp\Websocket\CloseCode;
-use Amp\Websocket\ClosedException;
 use Amp\Websocket\Parser\ParserException;
 use Amp\Websocket\Parser\WebsocketFrameCompiler;
 use Amp\Websocket\Parser\WebsocketFrameHandler;
 use Amp\Websocket\Parser\WebsocketParser;
+use Amp\Websocket\WebsocketCloseCode;
+use Amp\Websocket\WebsocketClosedException;
 use Amp\Websocket\WebsocketFrameType;
 use Amp\Websocket\WebsocketHeartbeatQueue;
 use Amp\Websocket\WebsocketMessage;
@@ -92,7 +92,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         if (!$this->metadata->isClosed()) {
             $this->metadata->closedByPeer = true;
             $this->close(
-                $code ?? CloseCode::ABNORMAL_CLOSE,
+                $code ?? WebsocketCloseCode::ABNORMAL_CLOSE,
                 $message ?? 'TCP connection closed unexpectedly',
             );
         }
@@ -124,7 +124,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         if (!$this->currentMessageQueue) {
             if ($frameType === WebsocketFrameType::Continuation) {
                 $this->close(
-                    CloseCode::PROTOCOL_ERROR,
+                    WebsocketCloseCode::PROTOCOL_ERROR,
                     'Illegal CONTINUATION opcode; initial message payload frame must be TEXT or BINARY'
                 );
                 return;
@@ -150,7 +150,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
             }
         } elseif ($frameType !== WebsocketFrameType::Continuation) {
             $this->close(
-                CloseCode::PROTOCOL_ERROR,
+                WebsocketCloseCode::PROTOCOL_ERROR,
                 'Illegal data type opcode after unfinished previous data type frame; opcode MUST be CONTINUATION',
             );
             return;
@@ -190,10 +190,10 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
                 $length = \strlen($data);
                 if ($length === 0) {
-                    $code = CloseCode::NONE;
+                    $code = WebsocketCloseCode::NONE;
                     $reason = '';
                 } elseif ($length < 2) {
-                    $code = CloseCode::PROTOCOL_ERROR;
+                    $code = WebsocketCloseCode::PROTOCOL_ERROR;
                     $reason = 'Close code must be two bytes';
                 } else {
                     $code = \unpack('n', $data)[1];
@@ -208,10 +208,10 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                         // 4000-4999 allowed, reserved for applications
                         || $code >= 5000 // >= 5000 invalid
                     ) {
-                        $code = CloseCode::PROTOCOL_ERROR;
+                        $code = WebsocketCloseCode::PROTOCOL_ERROR;
                         $reason = 'Invalid close code';
                     } elseif (!\preg_match('//u', $reason)) {
-                        $code = CloseCode::INCONSISTENT_FRAME_DATA_TYPE;
+                        $code = WebsocketCloseCode::INCONSISTENT_FRAME_DATA_TYPE;
                         $reason = 'Close reason must be valid UTF-8';
                     }
                 }
@@ -252,13 +252,13 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         $this->socket->write($frame);
     }
 
-    public function close(int $code = CloseCode::NORMAL_CLOSE, string $reason = ''): void
+    public function close(int $code = WebsocketCloseCode::NORMAL_CLOSE, string $reason = ''): void
     {
         if ($this->metadata->isClosed()) {
             return;
         }
 
-        \assert($code !== CloseCode::NONE || $reason === '');
+        \assert($code !== WebsocketCloseCode::NONE || $reason === '');
 
         $this->metadata->closedAt = \time();
         $this->metadata->closeCode = $code;
@@ -266,7 +266,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
         $this->messageQueue->complete();
 
-        $this->currentMessageQueue?->error(new ClosedException(
+        $this->currentMessageQueue?->error(new WebsocketClosedException(
             'Connection closed while streaming message body',
             $code,
             $reason,
@@ -283,7 +283,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
             async(
                 $this->write(...),
                 WebsocketFrameType::Close,
-                $code !== CloseCode::NONE ? \pack('n', $code) . $reason : '',
+                $code !== WebsocketCloseCode::NONE ? \pack('n', $code) . $reason : '',
             )->await($cancellation);
 
             // Wait for peer close frame for configured number of seconds.

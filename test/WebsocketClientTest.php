@@ -10,11 +10,11 @@ use Amp\PHPUnit\AsyncTestCase;
 use Amp\Pipeline\Queue;
 use Amp\Socket\Socket;
 use Amp\Socket\SocketException;
-use Amp\Websocket\CloseCode;
-use Amp\Websocket\ClosedException;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Rfc6455Client;
 use Amp\Websocket\WebsocketClientEventKey;
+use Amp\Websocket\WebsocketCloseCode;
+use Amp\Websocket\WebsocketClosedException;
 use Amp\Websocket\WebsocketFrameType;
 use PHPUnit\Framework\MockObject\MockObject;
 use Revolt\EventLoop;
@@ -58,7 +58,7 @@ class WebsocketClientTest extends AsyncTestCase
 
     public function testClose(): void
     {
-        $code = CloseCode::PROTOCOL_ERROR;
+        $code = WebsocketCloseCode::PROTOCOL_ERROR;
         $reason = 'Close reason';
 
         $socket = $this->createSocket();
@@ -92,7 +92,7 @@ class WebsocketClientTest extends AsyncTestCase
         $this->assertTrue($client->isClosed());
         $this->assertFalse($client->isClosedByPeer());
         $this->assertSame($code, $client->getCloseCode());
-        $this->assertFalse(CloseCode::isExpected($code));
+        $this->assertFalse(WebsocketCloseCode::isExpected($code));
         $this->assertSame($reason, $client->getCloseReason());
         $this->assertGreaterThan(0, $client->getLastEventTime(WebsocketClientEventKey::ClosedAt));
 
@@ -104,7 +104,7 @@ class WebsocketClientTest extends AsyncTestCase
         $this->setMinimumRuntime(1);
         $this->setTimeout(1.5);
 
-        $code = CloseCode::NORMAL_CLOSE;
+        $code = WebsocketCloseCode::NORMAL_CLOSE;
         $reason = 'Close reason';
 
         $socket = $this->createSocket();
@@ -131,7 +131,7 @@ class WebsocketClientTest extends AsyncTestCase
         $this->assertTrue($client->isClosed());
         $this->assertFalse($client->isClosedByPeer());
         $this->assertSame($code, $client->getCloseCode());
-        $this->assertTrue(CloseCode::isExpected($code));
+        $this->assertTrue(WebsocketCloseCode::isExpected($code));
         $this->assertSame($reason, $client->getCloseReason());
 
         delay(0);
@@ -275,7 +275,7 @@ class WebsocketClientTest extends AsyncTestCase
 
         $client = $this->createClient($socket);
 
-        $this->expectException(ClosedException::class);
+        $this->expectException(WebsocketClosedException::class);
         $this->expectExceptionMessage('Writing to the client failed');
 
         $client->sendText('data');
@@ -303,7 +303,7 @@ class WebsocketClientTest extends AsyncTestCase
 
         $stream = new ReadableIterableStream($emitter->pipe());
 
-        $this->expectException(ClosedException::class);
+        $this->expectException(WebsocketClosedException::class);
         $this->expectExceptionMessage('Writing to the client failed');
 
         $client->streamText($stream);
@@ -341,8 +341,8 @@ class WebsocketClientTest extends AsyncTestCase
 
         self::assertNull($client->receive());
 
-        self::assertSame(CloseCode::ABNORMAL_CLOSE, $client->getCloseCode());
-        self::assertFalse(CloseCode::isExpected($client->getCloseCode()));
+        self::assertSame(WebsocketCloseCode::ABNORMAL_CLOSE, $client->getCloseCode());
+        self::assertFalse(WebsocketCloseCode::isExpected($client->getCloseCode()));
         self::assertStringContainsString('TCP connection closed', $client->getCloseReason());
     }
 
@@ -378,8 +378,8 @@ class WebsocketClientTest extends AsyncTestCase
 
         $client->onClose($this->createCallback(1));
 
-        $future1 = async(fn () => $client->close(CloseCode::NORMAL_CLOSE, 'First close'));
-        $future2 = async(fn () => $client->close(CloseCode::ABNORMAL_CLOSE, 'Second close'));
+        $future1 = async(fn () => $client->close(WebsocketCloseCode::NORMAL_CLOSE, 'First close'));
+        $future2 = async(fn () => $client->close(WebsocketCloseCode::ABNORMAL_CLOSE, 'Second close'));
 
         try {
             Future\await([$future1, $future2]);
@@ -388,7 +388,7 @@ class WebsocketClientTest extends AsyncTestCase
         }
 
         // First close code should be used, second is ignored.
-        $this->assertSame(CloseCode::NORMAL_CLOSE, $client->getCloseCode());
+        $this->assertSame(WebsocketCloseCode::NORMAL_CLOSE, $client->getCloseCode());
         $this->assertSame('First close', $client->getCloseReason());
     }
 
@@ -454,7 +454,7 @@ class WebsocketClientTest extends AsyncTestCase
             ->withConsecutive(...\array_map(fn (string $packet) => [$packet], [
                 compile(WebsocketFrameType::Text, false, false, $chunk),
                 compile(WebsocketFrameType::Continuation, false, true, $chunk),
-                compile(WebsocketFrameType::Close, false, true, \pack('n', CloseCode::GOING_AWAY)),
+                compile(WebsocketFrameType::Close, false, true, \pack('n', WebsocketCloseCode::GOING_AWAY)),
             ]));
 
         $socket->expects(self::once())

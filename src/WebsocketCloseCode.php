@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-final class CloseCode
+final class WebsocketCloseCode
 {
     public const NORMAL_CLOSE = 1000;
     public const GOING_AWAY = 1001;
@@ -55,7 +55,7 @@ final class CloseCode
     public static function isExpected(int $code): bool
     {
         return match ($code) {
-            CloseCode::NORMAL_CLOSE, CloseCode::GOING_AWAY, CloseCode::NONE => true,
+            WebsocketCloseCode::NORMAL_CLOSE, WebsocketCloseCode::GOING_AWAY, WebsocketCloseCode::NONE => true,
             default => false,
         };
     }
