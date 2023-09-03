@@ -337,7 +337,7 @@ class WebsocketClientTest extends AsyncTestCase
         $client = $this->createClient($socket);
 
         $message = $client->receive();
-        self::assertSame('message', $message->buffer());
+        self::assertSame('message', (string) $message);
 
         self::assertNull($client->receive());
 
@@ -435,7 +435,7 @@ class WebsocketClientTest extends AsyncTestCase
         $client = $this->createClient($socket, true);
 
         foreach ($client as $key => $message) {
-            self::assertSame('message' . $key, $message->buffer());
+            self::assertSame('message' . $key, (string) $message);
         }
     }
 

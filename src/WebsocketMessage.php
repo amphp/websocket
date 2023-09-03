@@ -15,7 +15,7 @@ use Amp\ForbidSerialization;
  *
  * @implements \IteratorAggregate<int, string>
  */
-final class WebsocketMessage implements ReadableStream, \IteratorAggregate
+final class WebsocketMessage implements ReadableStream, \IteratorAggregate, \Stringable
 {
     use ForbidCloning;
     use ForbidSerialization;
@@ -116,5 +116,14 @@ final class WebsocketMessage implements ReadableStream, \IteratorAggregate
     public function getIterator(): \Traversable
     {
         return $this->stream->getIterator();
+    }
+
+    /**
+     * @throws BufferException|StreamException
+     * @throws WebsocketClosedException
+     */
+    public function __toString(): string
+    {
+        return $this->buffer();
     }
 }
