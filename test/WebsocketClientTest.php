@@ -12,10 +12,10 @@ use Amp\Socket\Socket;
 use Amp\Socket\SocketException;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Rfc6455Client;
-use Amp\Websocket\WebsocketClientEventKey;
 use Amp\Websocket\WebsocketCloseCode;
 use Amp\Websocket\WebsocketClosedException;
 use Amp\Websocket\WebsocketFrameType;
+use Amp\Websocket\WebsocketTime;
 use PHPUnit\Framework\MockObject\MockObject;
 use Revolt\EventLoop;
 use function Amp\async;
@@ -94,7 +94,7 @@ class WebsocketClientTest extends AsyncTestCase
         $this->assertSame($code, $client->getCloseCode());
         $this->assertFalse(WebsocketCloseCode::isExpected($code));
         $this->assertSame($reason, $client->getCloseReason());
-        $this->assertGreaterThan(0, $client->getLastEventTime(WebsocketClientEventKey::ClosedAt));
+        $this->assertGreaterThan(0, $client->getTime(WebsocketTime::Closed));
 
         self::assertNull($future->await());
     }

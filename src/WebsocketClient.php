@@ -121,14 +121,14 @@ interface WebsocketClient extends Closable, \Traversable
      *
      * @return int<0, max>
      */
-    public function getStat(WebsocketClientStatKey $key): int;
+    public function getCounter(WebsocketCounter $key): int;
 
     /**
      * Returns the most recent timestamp the given event was observed, or 0 if the event has not occurred.
      *
      * @return int<0, max>
      */
-    public function getLastEventTime(WebsocketClientEventKey $key): int;
+    public function getTime(WebsocketTime $key): int;
 
     /**
      * @return bool `false` if the client is still connected, `true` if the client has disconnected.

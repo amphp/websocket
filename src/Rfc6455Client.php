@@ -145,30 +145,30 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         return $this->metadata->compressionEnabled;
     }
 
-    public function getStat(WebsocketClientStatKey $key): int
+    public function getCounter(WebsocketCounter $key): int
     {
         return match ($key) {
-            WebsocketClientStatKey::BytesRead => $this->metadata->bytesRead,
-            WebsocketClientStatKey::BytesSent => $this->metadata->bytesSent,
-            WebsocketClientStatKey::FramesRead => $this->metadata->framesRead,
-            WebsocketClientStatKey::FramesSent => $this->metadata->framesSent,
-            WebsocketClientStatKey::MessagesRead => $this->metadata->messagesRead,
-            WebsocketClientStatKey::MessagesSent => $this->metadata->messagesSent,
-            WebsocketClientStatKey::PingCount => $this->metadata->pingCount,
-            WebsocketClientStatKey::PongCount => $this->metadata->pongCount,
+            WebsocketCounter::BytesRead => $this->metadata->bytesRead,
+            WebsocketCounter::BytesSent => $this->metadata->bytesSent,
+            WebsocketCounter::FramesRead => $this->metadata->framesRead,
+            WebsocketCounter::FramesSent => $this->metadata->framesSent,
+            WebsocketCounter::MessagesRead => $this->metadata->messagesRead,
+            WebsocketCounter::MessagesSent => $this->metadata->messagesSent,
+            WebsocketCounter::PingCount => $this->metadata->pingCount,
+            WebsocketCounter::PongCount => $this->metadata->pongCount,
         };
     }
 
-    public function getLastEventTime(WebsocketClientEventKey $key): int
+    public function getTime(WebsocketTime $key): int
     {
         return match ($key) {
-            WebsocketClientEventKey::ConnectedAt => $this->metadata->connectedAt,
-            WebsocketClientEventKey::ClosedAt => $this->metadata->closedAt,
-            WebsocketClientEventKey::LastReadAt => $this->metadata->lastReadAt,
-            WebsocketClientEventKey::LastSentAt => $this->metadata->lastSentAt,
-            WebsocketClientEventKey::LastDataReadAt => $this->metadata->lastDataReadAt,
-            WebsocketClientEventKey::LastDataSentAt => $this->metadata->lastDataSentAt,
-            WebsocketClientEventKey::LastHeartbeatAt => $this->metadata->lastHeartbeatAt,
+            WebsocketTime::Connected => $this->metadata->connectedAt,
+            WebsocketTime::Closed => $this->metadata->closedAt,
+            WebsocketTime::LastRead => $this->metadata->lastReadAt,
+            WebsocketTime::LastSent => $this->metadata->lastSentAt,
+            WebsocketTime::LastDataRead => $this->metadata->lastDataReadAt,
+            WebsocketTime::LastDataSent => $this->metadata->lastDataSentAt,
+            WebsocketTime::LastHeartbeat => $this->metadata->lastHeartbeatAt,
         };
     }
 

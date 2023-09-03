@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-enum WebsocketClientStatKey
+enum WebsocketCounter
 {
     case BytesRead;
     case BytesSent;
