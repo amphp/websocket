@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket;
 
-interface HeartbeatQueue
+interface WebsocketHeartbeatQueue
 {
     /**
      * Insert the given client into the heartbeat queue. If a reference is retained to the {@see WebsocketClient},

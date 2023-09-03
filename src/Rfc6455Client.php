@@ -49,7 +49,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         WebsocketParserFactory $parserFactory = new Rfc6455ParserFactory(),
         WebsocketFrameCompilerFactory $compilerFactory = new Rfc6455FrameCompilerFactory(),
         ?CompressionContext $compressionContext = null,
-        ?HeartbeatQueue $heartbeatQueue = null,
+        ?WebsocketHeartbeatQueue $heartbeatQueue = null,
         ?WebsocketRateLimit $rateLimit = null,
         private readonly int $frameSplitThreshold = self::DEFAULT_FRAME_SPLIT_THRESHOLD,
         float $closePeriod = self::DEFAULT_CLOSE_PERIOD,

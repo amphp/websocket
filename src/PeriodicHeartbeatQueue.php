@@ -8,7 +8,7 @@ use Revolt\EventLoop;
 use function Amp\async;
 use function Amp\weakClosure;
 
-final class DefaultHeartbeatQueue implements HeartbeatQueue
+final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
 {
     use ForbidCloning;
     use ForbidSerialization;

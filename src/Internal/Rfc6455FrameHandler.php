@@ -14,12 +14,12 @@ use Amp\Socket\Socket;
 use Amp\TimeoutCancellation;
 use Amp\Websocket\CloseCode;
 use Amp\Websocket\ClosedException;
-use Amp\Websocket\HeartbeatQueue;
 use Amp\Websocket\Parser\ParserException;
 use Amp\Websocket\Parser\WebsocketFrameCompiler;
 use Amp\Websocket\Parser\WebsocketFrameHandler;
 use Amp\Websocket\Parser\WebsocketParser;
 use Amp\Websocket\WebsocketFrameType;
+use Amp\Websocket\WebsocketHeartbeatQueue;
 use Amp\Websocket\WebsocketMessage;
 use Amp\Websocket\WebsocketRateLimit;
 use function Amp\async;
@@ -41,7 +41,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
     public function __construct(
         private readonly Socket $socket,
         private readonly WebsocketFrameCompiler $frameCompiler,
-        private readonly ?HeartbeatQueue $heartbeatQueue,
+        private readonly ?WebsocketHeartbeatQueue $heartbeatQueue,
         private readonly ?WebsocketRateLimit $rateLimit,
         private readonly WebsocketClientMetadata $metadata,
         private readonly float $closePeriod,
