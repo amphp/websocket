@@ -145,30 +145,30 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         return $this->metadata->compressionEnabled;
     }
 
-    public function getCounter(WebsocketCounter $key): int
+    public function getCount(WebsocketCount $type): int
     {
-        return match ($key) {
-            WebsocketCounter::BytesRead => $this->metadata->bytesRead,
-            WebsocketCounter::BytesSent => $this->metadata->bytesSent,
-            WebsocketCounter::FramesRead => $this->metadata->framesRead,
-            WebsocketCounter::FramesSent => $this->metadata->framesSent,
-            WebsocketCounter::MessagesRead => $this->metadata->messagesRead,
-            WebsocketCounter::MessagesSent => $this->metadata->messagesSent,
-            WebsocketCounter::PingCount => $this->metadata->pingCount,
-            WebsocketCounter::PongCount => $this->metadata->pongCount,
+        return match ($type) {
+            WebsocketCount::BytesRead => $this->metadata->bytesRead,
+            WebsocketCount::BytesSent => $this->metadata->bytesSent,
+            WebsocketCount::FramesRead => $this->metadata->framesRead,
+            WebsocketCount::FramesSent => $this->metadata->framesSent,
+            WebsocketCount::MessagesRead => $this->metadata->messagesRead,
+            WebsocketCount::MessagesSent => $this->metadata->messagesSent,
+            WebsocketCount::PingCount => $this->metadata->pingCount,
+            WebsocketCount::PongCount => $this->metadata->pongCount,
         };
     }
 
-    public function getTime(WebsocketTime $key): int
+    public function getTimestamp(WebsocketTimestamp $type): int
     {
-        return match ($key) {
-            WebsocketTime::Connected => $this->metadata->connectedAt,
-            WebsocketTime::Closed => $this->metadata->closedAt,
-            WebsocketTime::LastRead => $this->metadata->lastReadAt,
-            WebsocketTime::LastSent => $this->metadata->lastSentAt,
-            WebsocketTime::LastDataRead => $this->metadata->lastDataReadAt,
-            WebsocketTime::LastDataSent => $this->metadata->lastDataSentAt,
-            WebsocketTime::LastHeartbeat => $this->metadata->lastHeartbeatAt,
+        return match ($type) {
+            WebsocketTimestamp::Connected => $this->metadata->connectedAt,
+            WebsocketTimestamp::Closed => $this->metadata->closedAt,
+            WebsocketTimestamp::LastRead => $this->metadata->lastReadAt,
+            WebsocketTimestamp::LastSend => $this->metadata->lastSentAt,
+            WebsocketTimestamp::LastDataRead => $this->metadata->lastDataReadAt,
+            WebsocketTimestamp::LastDataSend => $this->metadata->lastDataSentAt,
+            WebsocketTimestamp::LastHeartbeat => $this->metadata->lastHeartbeatAt,
         };
     }
 

@@ -2,13 +2,13 @@
 
 namespace Amp\Websocket;
 
-enum WebsocketTime
+enum WebsocketTimestamp
 {
     case Connected;
     case Closed;
     case LastRead;
-    case LastSent;
+    case LastSend;
     case LastDataRead;
-    case LastDataSent;
+    case LastDataSend;
     case LastHeartbeat;
 }

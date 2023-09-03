@@ -117,18 +117,18 @@ interface WebsocketClient extends Closable, \Traversable
     public function ping(): void;
 
     /**
-     * Returns connection stat information for the passed enum case.
+     * Returns the corresponding count of events for the passed enum case.
      *
      * @return int<0, max>
      */
-    public function getCounter(WebsocketCounter $key): int;
+    public function getCount(WebsocketCount $type): int;
 
     /**
-     * Returns the most recent timestamp the given event was observed, or 0 if the event has not occurred.
+     * Returns the most recent timestamp the given event enum case was observed, or 0 if the event has not occurred.
      *
      * @return int<0, max>
      */
-    public function getTime(WebsocketTime $key): int;
+    public function getTimestamp(WebsocketTimestamp $type): int;
 
     /**
      * @return bool `false` if the client is still connected, `true` if the client has disconnected.
