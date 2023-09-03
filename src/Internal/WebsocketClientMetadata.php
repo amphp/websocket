@@ -15,23 +15,17 @@ final class WebsocketClientMetadata
 
     public ?WebsocketCloseInfo $closeInfo = null;
 
-    /** @var int<0, max> */
-    public readonly int $connectedAt;
+    public readonly float $connectedAt;
 
-    /** @var int<0, max> */
-    public int $lastReadAt = 0;
+    public float $lastReadAt = 0;
 
-    /** @var int<0, max> */
-    public int $lastSentAt = 0;
+    public float $lastSentAt = 0;
 
-    /** @var int<0, max> */
-    public int $lastDataReadAt = 0;
+    public float $lastDataReadAt = 0;
 
-    /** @var int<0, max> */
-    public int $lastDataSentAt = 0;
+    public float $lastDataSentAt = 0;
 
-    /** @var int<0, max> */
-    public int $lastHeartbeatAt = 0;
+    public float $lastHeartbeatAt = 0;
 
     /** @var int<0, max> */
     public int $bytesReceived = 0;
@@ -68,7 +62,7 @@ final class WebsocketClientMetadata
     ) {
         $this->id = self::$nextId++;
 
-        $this->connectedAt = \time();
+        $this->connectedAt = \microtime(true);
     }
 
     public function isClosed(): bool

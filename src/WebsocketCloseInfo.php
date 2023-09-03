@@ -4,21 +4,18 @@ namespace Amp\Websocket;
 
 final class WebsocketCloseInfo
 {
-    /**
-     * @param int<0, max> $timestamp
-     */
     public function __construct(
         private readonly int $code,
         private readonly string $reason,
-        private readonly int $timestamp,
+        private readonly float $timestamp,
         private readonly bool $byPeer,
     ) {
     }
 
     /**
-     * @return int<0, max> Unix timestamp at which the connection was closed.
+     * @return float Unix timestamp (including fractions of a second) at which the connection was closed.
      */
-    public function getTimestamp(): int
+    public function getTimestamp(): float
     {
         return $this->timestamp;
     }

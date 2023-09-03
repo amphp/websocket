@@ -67,7 +67,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                     continue;
                 }
 
-                $this->metadata->lastReadAt = \time();
+                $this->metadata->lastReadAt = \microtime(true);
                 $this->metadata->bytesReceived += \strlen($chunk);
 
                 $this->heartbeatQueue?->update($this->metadata->id);
@@ -115,7 +115,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
     {
         \assert(!$frameType->isControlFrame());
 
-        $this->metadata->lastDataReadAt = \time();
+        $this->metadata->lastDataReadAt = \microtime(true);
 
         // Ignore further data received after initiating close.
         if ($this->metadata->isClosed()) {
@@ -233,7 +233,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                 // We need a min() here, else someone might just send a pong frame with a very high pong count and
                 // leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
                 $this->metadata->pongsReceived = \min($this->metadata->pingsSent, \max(0, (int) $data));
-                $this->metadata->lastHeartbeatAt = \time();
+                $this->metadata->lastHeartbeatAt = \microtime(true);
                 break;
 
             default:
@@ -248,7 +248,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
         ++$this->metadata->framesSent;
         $this->metadata->bytesSent += \strlen($frame);
-        $this->metadata->lastSentAt = \time();
+        $this->metadata->lastSentAt = \microtime(true);
 
         $this->socket->write($frame);
     }
@@ -264,7 +264,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         $this->metadata->closeInfo = new WebsocketCloseInfo(
             $code,
             $reason,
-            \time(),
+            \microtime(true),
             $byPeer,
         );
 

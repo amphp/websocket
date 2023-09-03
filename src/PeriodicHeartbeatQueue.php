@@ -18,11 +18,11 @@ final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
 
     private readonly string $watcher;
 
-    /** @var array<int, int> Least-recently-used cache of next ping (heartbeat) times. */
+    /** @var array<int, float> Least-recently-used cache of next ping (heartbeat) times. */
     private array $heartbeatTimeouts = [];
 
-    /** @var int Cached current time to avoid syscall on each update. */
-    private int $now;
+    /** @var float Cached current time to avoid syscall on each update. */
+    private float $now;
 
     /**
      * @param positive-int $queuedPingLimit
@@ -42,10 +42,10 @@ final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
             throw new \ValueError('Heartbeat period must be greater than 0');
         }
 
-        $this->now = \time();
+        $this->now = \microtime(true);
 
         $this->watcher = EventLoop::repeat(1, weakClosure(function () use ($queuedPingLimit): void {
-            $this->now = \time();
+            $this->now = \microtime(true);
 
             foreach ($this->heartbeatTimeouts as $clientId => $expiryTime) {
                 if ($expiryTime >= $this->now) {

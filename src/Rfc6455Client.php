@@ -151,7 +151,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         };
     }
 
-    public function getTimestamp(WebsocketTimestamp $type): int
+    public function getTimestamp(WebsocketTimestamp $type): float
     {
         return match ($type) {
             WebsocketTimestamp::Connected => $this->metadata->connectedAt,
@@ -206,7 +206,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
     private function sendData(WebsocketFrameType $frameType, string $data): void
     {
         ++$this->metadata->messagesSent;
-        $this->metadata->lastDataSentAt = \time();
+        $this->metadata->lastDataSentAt = \microtime(true);
 
         try {
             $this->frameHandler->write($frameType, $data);
@@ -243,7 +243,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
     private function sendStream(ReadableStream $stream, WebsocketFrameType $frameType): void
     {
         ++$this->metadata->messagesSent;
-        $this->metadata->lastDataSentAt = \time();
+        $this->metadata->lastDataSentAt = \microtime(true);
 
         try {
             $chunk = $stream->read();

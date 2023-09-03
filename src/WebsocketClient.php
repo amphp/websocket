@@ -105,11 +105,11 @@ interface WebsocketClient extends Closable, \Traversable
     public function getCount(WebsocketCount $type): int;
 
     /**
-     * Returns the most recent timestamp the given event enum case was observed, or 0 if the event has not occurred.
+     * Returns the most recent unix timestamp (including fractions of a second) the given event enum case was observed,
+     * or 0 if the event has not occurred.
      *
-     * @return int<0, max>
      */
-    public function getTimestamp(WebsocketTimestamp $type): int;
+    public function getTimestamp(WebsocketTimestamp $type): float;
 
     /**
      * @return bool `false` if the client is still connected, `true` if the client has disconnected.
