@@ -175,49 +175,49 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
     public function sendText(string $data): void
     {
         \assert((bool) \preg_match('//u', $data), 'Text data must be UTF-8');
-        $this->pushData(Opcode::Text, $data);
+        $this->pushData(WebsocketFrameType::Text, $data);
     }
 
     public function sendBinary(string $data): void
     {
-        $this->pushData(Opcode::Binary, $data);
+        $this->pushData(WebsocketFrameType::Binary, $data);
     }
 
     public function streamText(ReadableStream $stream): void
     {
-        $this->pushStream(Opcode::Text, $stream);
+        $this->pushStream(WebsocketFrameType::Text, $stream);
     }
 
     public function streamBinary(ReadableStream $stream): void
     {
-        $this->pushStream(Opcode::Binary, $stream);
+        $this->pushStream(WebsocketFrameType::Binary, $stream);
     }
 
     public function ping(): void
     {
         ++$this->metadata->pingCount;
-        $this->frameHandler->write(Opcode::Ping, (string) $this->metadata->pingCount);
+        $this->frameHandler->write(WebsocketFrameType::Ping, (string) $this->metadata->pingCount);
     }
 
-    private function pushData(Opcode $opcode, string $data): void
+    private function pushData(WebsocketFrameType $frameType, string $data): void
     {
         if ($this->lastWrite || \strlen($data) > $this->frameSplitThreshold) {
             // Treat as a stream if another stream is pending or if splitting the data into multiple frames.
-            $this->pushStream($opcode, new ReadableBuffer($data));
+            $this->pushStream($frameType, new ReadableBuffer($data));
             return;
         }
 
         // The majority of messages can be sent with a single frame.
-        $this->sendData($opcode, $data);
+        $this->sendData($frameType, $data);
     }
 
-    private function sendData(Opcode $opcode, string $data): void
+    private function sendData(WebsocketFrameType $frameType, string $data): void
     {
         ++$this->metadata->messagesSent;
         $this->metadata->lastDataSentAt = \time();
 
         try {
-            $this->frameHandler->write($opcode, $data);
+            $this->frameHandler->write($frameType, $data);
         } catch (\Throwable $exception) {
             $code = CloseCode::ABNORMAL_CLOSE;
             $reason = 'Writing to the client failed';
@@ -226,15 +226,15 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         }
     }
 
-    private function pushStream(Opcode $opcode, ReadableStream $stream): void
+    private function pushStream(WebsocketFrameType $frameType, ReadableStream $stream): void
     {
         $this->lastWrite ??= Future::complete();
 
         // Setting $this->lastWrite will force subsequent sends to queue until this stream has ended.
         $this->lastWrite = $thisWrite = $this->lastWrite->map(
-            function () use (&$thisWrite, $stream, $opcode): void {
+            function () use (&$thisWrite, $stream, $frameType): void {
                 try {
-                    $this->sendStream($stream, $opcode);
+                    $this->sendStream($stream, $frameType);
                 } finally {
                     // Null the reference to this coroutine if no other writes have been made so subsequent
                     // writes do not have to await a future.
@@ -248,7 +248,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         $this->lastWrite->await();
     }
 
-    private function sendStream(ReadableStream $stream, Opcode $opcode): void
+    private function sendStream(ReadableStream $stream, WebsocketFrameType $frameType): void
     {
         ++$this->metadata->messagesSent;
         $this->metadata->lastDataSentAt = \time();
@@ -257,7 +257,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
             $chunk = $stream->read();
 
             if ($chunk === null) {
-                $this->frameHandler->write($opcode, '');
+                $this->frameHandler->write($frameType, '');
                 return;
             }
 
@@ -280,15 +280,15 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
                     for ($i = 0; $i < $slices - 1; ++$i) {
                         $split = \substr($buffer, $splitLength * $i, $splitLength);
 
-                        $this->frameHandler->write($opcode, $split, false);
-                        $opcode = Opcode::Continuation;
+                        $this->frameHandler->write($frameType, $split, false);
+                        $frameType = WebsocketFrameType::Continuation;
                     }
 
                     $buffer = \substr($buffer, $splitLength * $i, $splitLength);
                 }
 
-                $this->frameHandler->write($opcode, $buffer, $chunk === null);
-                $opcode = Opcode::Continuation;
+                $this->frameHandler->write($frameType, $buffer, $chunk === null);
+                $frameType = WebsocketFrameType::Continuation;
             } while ($chunk !== null);
         } catch (StreamException $exception) {
             $code = CloseCode::ABNORMAL_CLOSE;

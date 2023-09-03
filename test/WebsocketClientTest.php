@@ -12,10 +12,10 @@ use Amp\Socket\Socket;
 use Amp\Socket\SocketException;
 use Amp\Websocket\CloseCode;
 use Amp\Websocket\ClosedException;
-use Amp\Websocket\Opcode;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Rfc6455Client;
 use Amp\Websocket\WebsocketClientEventKey;
+use Amp\Websocket\WebsocketFrameType;
 use PHPUnit\Framework\MockObject\MockObject;
 use Revolt\EventLoop;
 use function Amp\async;
@@ -62,7 +62,7 @@ class WebsocketClientTest extends AsyncTestCase
         $reason = 'Close reason';
 
         $socket = $this->createSocket();
-        $packet = compile(Opcode::Close, false, true, \pack('n', $code) . $reason);
+        $packet = compile(WebsocketFrameType::Close, false, true, \pack('n', $code) . $reason);
         $socket->expects($this->once())
             ->method('write')
             ->with($packet);
@@ -75,7 +75,7 @@ class WebsocketClientTest extends AsyncTestCase
                 if ($initial) {
                     $initial = false;
                     delay(0.1);
-                    return compile(Opcode::Close, true, true, \pack('n', $code) . $reason);
+                    return compile(WebsocketFrameType::Close, true, true, \pack('n', $code) . $reason);
                 }
 
                 return null;
@@ -108,7 +108,7 @@ class WebsocketClientTest extends AsyncTestCase
         $reason = 'Close reason';
 
         $socket = $this->createSocket();
-        $packet = compile(Opcode::Close, false, true, \pack('n', $code) . $reason);
+        $packet = compile(WebsocketFrameType::Close, false, true, \pack('n', $code) . $reason);
         $socket->expects($this->once())
             ->method('write')
             ->with($packet);
@@ -142,7 +142,7 @@ class WebsocketClientTest extends AsyncTestCase
     public function testPing(): void
     {
         $socket = $this->createSocket();
-        $packet = compile(Opcode::Ping, false, true, '1');
+        $packet = compile(WebsocketFrameType::Ping, false, true, '1');
         $socket->expects($this->atLeastOnce())
             ->method('write')
             ->withConsecutive([$packet]);
@@ -157,7 +157,7 @@ class WebsocketClientTest extends AsyncTestCase
     public function testSend(): void
     {
         $socket = $this->createSocket();
-        $packet = compile(Opcode::Text, false, true, 'data');
+        $packet = compile(WebsocketFrameType::Text, false, true, 'data');
         $socket->expects($this->atLeastOnce())
             ->method('write')
             ->withConsecutive([$packet]);
@@ -172,10 +172,10 @@ class WebsocketClientTest extends AsyncTestCase
     public function testSendSplit(): void
     {
         $packets = [
-            compile(Opcode::Text, false, false, 'chunk1'),
-            compile(Opcode::Continuation, false, false, 'chunk2'),
-            compile(Opcode::Continuation, false, false, 'chunk3'),
-            compile(Opcode::Continuation, false, true, 'end'),
+            compile(WebsocketFrameType::Text, false, false, 'chunk1'),
+            compile(WebsocketFrameType::Continuation, false, false, 'chunk2'),
+            compile(WebsocketFrameType::Continuation, false, false, 'chunk3'),
+            compile(WebsocketFrameType::Continuation, false, true, 'end'),
         ];
 
         $socket = $this->createSocket();
@@ -193,7 +193,7 @@ class WebsocketClientTest extends AsyncTestCase
     public function testSendBinary(): void
     {
         $socket = $this->createSocket();
-        $packet = compile(Opcode::Binary, false, true, 'data');
+        $packet = compile(WebsocketFrameType::Binary, false, true, 'data');
         $socket->expects($this->atLeastOnce())
             ->method('write')
             ->withConsecutive([$packet]);
@@ -208,9 +208,9 @@ class WebsocketClientTest extends AsyncTestCase
     public function testStream(): void
     {
         $packets = \array_map(fn (string $packet) => [$packet], [
-            compile(Opcode::Text, false, false, 'chunk1'),
-            compile(Opcode::Continuation, false, false, 'chunk2'),
-            compile(Opcode::Continuation, false, true, 'chunk3'),
+            compile(WebsocketFrameType::Text, false, false, 'chunk1'),
+            compile(WebsocketFrameType::Continuation, false, false, 'chunk2'),
+            compile(WebsocketFrameType::Continuation, false, true, 'chunk3'),
         ]);
 
         $socket = $this->createSocket();
@@ -236,10 +236,10 @@ class WebsocketClientTest extends AsyncTestCase
     public function testStreamMultipleChunks(): void
     {
         $packets = [
-            compile(Opcode::Text, false, false, 'chunk1'),
-            compile(Opcode::Continuation, false, false, 'chunk2'),
-            compile(Opcode::Continuation, false, false, 'chunk'),
-            compile(Opcode::Continuation, false, true, '3'),
+            compile(WebsocketFrameType::Text, false, false, 'chunk1'),
+            compile(WebsocketFrameType::Continuation, false, false, 'chunk2'),
+            compile(WebsocketFrameType::Continuation, false, false, 'chunk'),
+            compile(WebsocketFrameType::Continuation, false, true, '3'),
         ];
 
         $socket = $this->createSocket();
@@ -330,7 +330,7 @@ class WebsocketClientTest extends AsyncTestCase
 
         $socket->method('read')
             ->willReturnOnConsecutiveCalls(
-                compile(Opcode::Text, true, true, 'message'),
+                compile(WebsocketFrameType::Text, true, true, 'message'),
                 self::throwException(new SocketException('Mock exception')),
             );
 
@@ -395,10 +395,10 @@ class WebsocketClientTest extends AsyncTestCase
     public function testDisposedMessage(): void
     {
         $frames = [
-            compile(Opcode::Text, true, false, 'chunk1'),
-            compile(Opcode::Continuation, true, false, 'chunk2'),
-            compile(Opcode::Continuation, true, true, 'chunk3'),
-            compile(Opcode::Text, true, true, 'second'),
+            compile(WebsocketFrameType::Text, true, false, 'chunk1'),
+            compile(WebsocketFrameType::Continuation, true, false, 'chunk2'),
+            compile(WebsocketFrameType::Continuation, true, true, 'chunk3'),
+            compile(WebsocketFrameType::Text, true, true, 'second'),
         ];
 
         $socket = $this->createSocket();
@@ -421,10 +421,10 @@ class WebsocketClientTest extends AsyncTestCase
     public function testReceiveIteration(): void
     {
         $frames = [
-            compile(Opcode::Text, false, true, 'message0'),
-            compile(Opcode::Text, false, true, 'message1'),
-            compile(Opcode::Text, false, true, 'message2'),
-            compile(Opcode::Close, false, true),
+            compile(WebsocketFrameType::Text, false, true, 'message0'),
+            compile(WebsocketFrameType::Text, false, true, 'message1'),
+            compile(WebsocketFrameType::Text, false, true, 'message2'),
+            compile(WebsocketFrameType::Close, false, true),
         ];
 
         $socket = $this->createSocket();
@@ -452,9 +452,9 @@ class WebsocketClientTest extends AsyncTestCase
         $socket->expects(self::exactly(3))
             ->method('write')
             ->withConsecutive(...\array_map(fn (string $packet) => [$packet], [
-                compile(Opcode::Text, false, false, $chunk),
-                compile(Opcode::Continuation, false, true, $chunk),
-                compile(Opcode::Close, false, true, \pack('n', CloseCode::GOING_AWAY)),
+                compile(WebsocketFrameType::Text, false, false, $chunk),
+                compile(WebsocketFrameType::Continuation, false, true, $chunk),
+                compile(WebsocketFrameType::Close, false, true, \pack('n', CloseCode::GOING_AWAY)),
             ]));
 
         $socket->expects(self::once())

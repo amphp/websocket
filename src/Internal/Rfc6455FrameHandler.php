@@ -15,12 +15,12 @@ use Amp\TimeoutCancellation;
 use Amp\Websocket\CloseCode;
 use Amp\Websocket\ClosedException;
 use Amp\Websocket\HeartbeatQueue;
-use Amp\Websocket\Opcode;
 use Amp\Websocket\Parser\ParserException;
 use Amp\Websocket\Parser\WebsocketFrameCompiler;
 use Amp\Websocket\Parser\WebsocketFrameHandler;
 use Amp\Websocket\Parser\WebsocketParser;
 use Amp\Websocket\RateLimiter;
+use Amp\Websocket\WebsocketFrameType;
 use Amp\Websocket\WebsocketMessage;
 use function Amp\async;
 
@@ -98,21 +98,21 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         }
     }
 
-    public function handleFrame(Opcode $opcode, string $data, bool $isFinal): void
+    public function handleFrame(WebsocketFrameType $frameType, string $data, bool $isFinal): void
     {
         ++$this->metadata->framesRead;
         $this->rateLimiter?->notifyFramesReceived($this->metadata->id, 1);
 
-        if ($opcode->isControlFrame()) {
-            $this->onControlFrame($opcode, $data);
+        if ($frameType->isControlFrame()) {
+            $this->onControlFrame($frameType, $data);
         } else {
-            $this->onData($opcode, $data, $isFinal);
+            $this->onData($frameType, $data, $isFinal);
         }
     }
 
-    private function onData(Opcode $opcode, string $data, bool $terminated): void
+    private function onData(WebsocketFrameType $frameType, string $data, bool $terminated): void
     {
-        \assert(!$opcode->isControlFrame());
+        \assert(!$frameType->isControlFrame());
 
         $this->metadata->lastDataReadAt = \time();
 
@@ -122,7 +122,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         }
 
         if (!$this->currentMessageQueue) {
-            if ($opcode === Opcode::Continuation) {
+            if ($frameType === WebsocketFrameType::Continuation) {
                 $this->close(
                     CloseCode::PROTOCOL_ERROR,
                     'Illegal CONTINUATION opcode; initial message payload frame must be TEXT or BINARY'
@@ -139,7 +139,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
             // Avoid holding a reference to the ReadableStream or Message object here so destructors will be invoked
             // if the message is not consumed by the user.
             $this->messageQueue->push(self::createMessage(
-                $opcode,
+                $frameType,
                 $this->currentMessageQueue
                     ? new ReadableIterableStream($this->currentMessageQueue->iterate())
                     : $data,
@@ -148,7 +148,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
             if (!$this->currentMessageQueue) {
                 return;
             }
-        } elseif ($opcode !== Opcode::Continuation) {
+        } elseif ($frameType !== WebsocketFrameType::Continuation) {
             $this->close(
                 CloseCode::PROTOCOL_ERROR,
                 'Illegal data type opcode after unfinished previous data type frame; opcode MUST be CONTINUATION',
@@ -168,17 +168,17 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         }
     }
 
-    private function onControlFrame(Opcode $opcode, string $data): void
+    private function onControlFrame(WebsocketFrameType $frameType, string $data): void
     {
-        \assert($opcode->isControlFrame());
+        \assert($frameType->isControlFrame());
 
         // Close already completed, so ignore any further data from the parser.
         if ($this->metadata->isClosed() && $this->closeDeferred === null) {
             return;
         }
 
-        switch ($opcode) {
-            case Opcode::Close:
+        switch ($frameType) {
+            case WebsocketFrameType::Close:
                 $this->closeDeferred?->complete();
                 $this->closeDeferred = null;
 
@@ -219,11 +219,11 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                 $this->close($code, $reason);
                 break;
 
-            case Opcode::Ping:
-                $this->write(Opcode::Pong, $data);
+            case WebsocketFrameType::Ping:
+                $this->write(WebsocketFrameType::Pong, $data);
                 break;
 
-            case Opcode::Pong:
+            case WebsocketFrameType::Pong:
                 if (!\preg_match('/^[1-9][0-9]*$/', $data)) {
                     // Ignore pong payload that is not an integer.
                     break;
@@ -237,13 +237,13 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
             default:
                 // This should be unreachable
-                throw new \Error('Non-control frame opcode: ' . $opcode->name);
+                throw new \Error('Non-control frame opcode: ' . $frameType->name);
         }
     }
 
-    public function write(Opcode $opcode, string $data, bool $isFinal = true): void
+    public function write(WebsocketFrameType $frameType, string $data, bool $isFinal = true): void
     {
-        $frame = $this->frameCompiler->compileFrame($opcode, $data, $isFinal);
+        $frame = $this->frameCompiler->compileFrame($frameType, $data, $isFinal);
 
         ++$this->metadata->framesSent;
         $this->metadata->bytesSent += \strlen($frame);
@@ -282,7 +282,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
             async(
                 $this->write(...),
-                Opcode::Close,
+                WebsocketFrameType::Close,
                 $code !== CloseCode::NONE ? \pack('n', $code) . $reason : '',
             )->await($cancellation);
 
@@ -295,9 +295,9 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         $this->socket->close();
     }
 
-    private static function createMessage(Opcode $opcode, ReadableStream|string $stream): WebsocketMessage
+    private static function createMessage(WebsocketFrameType $frameType, ReadableStream|string $stream): WebsocketMessage
     {
-        if ($opcode === Opcode::Binary) {
+        if ($frameType === WebsocketFrameType::Binary) {
             return WebsocketMessage::fromBinary($stream);
         }
 

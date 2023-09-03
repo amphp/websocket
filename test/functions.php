@@ -2,15 +2,15 @@
 
 namespace Amp\Websocket\Test;
 
-use Amp\Websocket\Opcode;
+use Amp\Websocket\WebsocketFrameType;
 
 // 4-byte "random" mask
 const MASK = "\xF4\x37\x7A\x9C";
 
-function compile(Opcode $opcode, bool $masked, bool $isFinal, string $data = "", int $rsv = 0b000): string
+function compile(WebsocketFrameType $frameType, bool $masked, bool $isFinal, string $data = "", int $rsv = 0b000): string
 {
     $length = \strlen($data);
-    $w = \chr(($isFinal << 7) | ($rsv << 4) | $opcode->value);
+    $w = \chr(($isFinal << 7) | ($rsv << 4) | $frameType->value);
 
     $maskFlag = $masked ? 0x80 : 0;
 

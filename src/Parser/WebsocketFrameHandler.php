@@ -2,12 +2,12 @@
 
 namespace Amp\Websocket\Parser;
 
-use Amp\Websocket\Opcode;
+use Amp\Websocket\WebsocketFrameType;
 
 interface WebsocketFrameHandler
 {
     /**
      * Invoked each time a frame is received by the parser.
      */
-    public function handleFrame(Opcode $opcode, string $data, bool $isFinal): void;
+    public function handleFrame(WebsocketFrameType $frameType, string $data, bool $isFinal): void;
 }

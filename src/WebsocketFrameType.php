@@ -2,7 +2,11 @@
 
 namespace Amp\Websocket;
 
-enum Opcode: int
+/**
+ * Frame type determined by frame opcode.
+ * @see https://www.rfc-editor.org/rfc/rfc6455#section-11.8
+ */
+enum WebsocketFrameType: int
 {
     case Continuation = 0x00;
     case Text = 0x01;

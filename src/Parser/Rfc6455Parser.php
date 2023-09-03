@@ -7,7 +7,7 @@ use Amp\ForbidSerialization;
 use Amp\Parser\Parser;
 use Amp\Websocket\CloseCode;
 use Amp\Websocket\Compression\CompressionContext;
-use Amp\Websocket\Opcode;
+use Amp\Websocket\WebsocketFrameType;
 
 final class Rfc6455Parser implements WebsocketParser
 {
@@ -97,14 +97,14 @@ final class Rfc6455Parser implements WebsocketParser
                 throw new ParserException(CloseCode::PROTOCOL_ERROR, 'Use of reserved control frame opcode');
             }
 
-            $opcode = Opcode::tryFrom($opcode);
-            if (!$opcode) {
+            $frameType = WebsocketFrameType::tryFrom($opcode);
+            if (!$frameType) {
                 throw new ParserException(CloseCode::PROTOCOL_ERROR, 'Invalid opcode');
             }
 
-            $isControlFrame = $opcode->isControlFrame();
+            $isControlFrame = $frameType->isControlFrame();
 
-            if ($isControlFrame || $opcode === Opcode::Continuation) { // Control and continuation frames
+            if ($isControlFrame || $frameType === WebsocketFrameType::Continuation) { // Control and continuation frames
                 if ($rsv !== 0) {
                     throw new ParserException(
                         CloseCode::PROTOCOL_ERROR,
@@ -119,7 +119,7 @@ final class Rfc6455Parser implements WebsocketParser
                     );
                 }
 
-                $doUtf8Validation = $validateUtf8 && $opcode === Opcode::Text;
+                $doUtf8Validation = $validateUtf8 && $frameType === WebsocketFrameType::Text;
                 $compressed = (bool) ($rsv & $compressedFlag);
             }
 
@@ -200,11 +200,11 @@ final class Rfc6455Parser implements WebsocketParser
             }
 
             if ($isControlFrame) {
-                $frameHandler->handleFrame($opcode, $payload, true);
+                $frameHandler->handleFrame($frameType, $payload, true);
                 continue;
             }
 
-            if ($textOnly && $opcode === Opcode::Binary) {
+            if ($textOnly && $frameType === WebsocketFrameType::Binary) {
                 throw new ParserException(
                     CloseCode::UNACCEPTABLE_TYPE,
                     'BINARY opcodes (0x02) not accepted'
@@ -257,7 +257,7 @@ final class Rfc6455Parser implements WebsocketParser
                 $dataMsgBytesRecd = 0;
             }
 
-            $frameHandler->handleFrame($opcode, $payload, $final);
+            $frameHandler->handleFrame($frameType, $payload, $final);
         }
     }
 }

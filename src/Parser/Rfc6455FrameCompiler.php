@@ -5,16 +5,16 @@ namespace Amp\Websocket\Parser;
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
 use Amp\Websocket\Compression\CompressionContext;
-use Amp\Websocket\Opcode;
+use Amp\Websocket\WebsocketFrameType;
 
 final class Rfc6455FrameCompiler implements WebsocketFrameCompiler
 {
     use ForbidCloning;
     use ForbidSerialization;
 
-    private ?Opcode $opcode = null;
+    private ?WebsocketFrameType $currentFrameType = null;
 
-    private bool $compress = false;
+    private bool $compressPayload = false;
 
     public function __construct(
         private readonly bool $masked,
@@ -22,27 +22,27 @@ final class Rfc6455FrameCompiler implements WebsocketFrameCompiler
     ) {
     }
 
-    public function compileFrame(Opcode $opcode, string $data, bool $isFinal): string
+    public function compileFrame(WebsocketFrameType $frameType, string $data, bool $isFinal): string
     {
-        \assert($this->assertState($opcode));
+        \assert($this->assertState($frameType));
 
-        if ($this->compressionContext && $opcode === Opcode::Text) {
-            $this->compress = !$isFinal || \strlen($data) > $this->compressionContext->getCompressionThreshold();
+        if ($this->compressionContext && $frameType === WebsocketFrameType::Text) {
+            $this->compressPayload = !$isFinal || \strlen($data) > $this->compressionContext->getCompressionThreshold();
         }
 
-        $this->opcode = match ($opcode) {
-            Opcode::Text, Opcode::Binary => $opcode,
-            default => $this->opcode,
+        $this->currentFrameType = match ($frameType) {
+            WebsocketFrameType::Text, WebsocketFrameType::Binary => $frameType,
+            default => $this->currentFrameType,
         };
 
         $rsv = 0;
 
         try {
-            if ($this->compressionContext && $this->compress && match ($opcode) {
-                Opcode::Text, Opcode::Continuation => true,
+            if ($this->compressionContext && $this->compressPayload && match ($frameType) {
+                WebsocketFrameType::Text, WebsocketFrameType::Continuation => true,
                 default => false,
             }) {
-                if ($opcode !== Opcode::Continuation) {
+                if ($frameType !== WebsocketFrameType::Continuation) {
                     $rsv |= $this->compressionContext->getRsv();
                 }
 
@@ -53,13 +53,13 @@ final class Rfc6455FrameCompiler implements WebsocketFrameCompiler
             throw $exception;
         } finally {
             if ($isFinal) {
-                $this->opcode = null;
-                $this->compress = false;
+                $this->currentFrameType = null;
+                $this->compressPayload = false;
             }
         }
 
         $length = \strlen($data);
-        $w = \chr(((int) $isFinal << 7) | ($rsv << 4) | $opcode->value);
+        $w = \chr(((int) $isFinal << 7) | ($rsv << 4) | $frameType->value);
 
         $maskFlag = $this->masked ? 0x80 : 0;
 
@@ -79,22 +79,22 @@ final class Rfc6455FrameCompiler implements WebsocketFrameCompiler
         return $w . $data;
     }
 
-    private function assertState(Opcode $opcode): bool
+    private function assertState(WebsocketFrameType $frameType): bool
     {
-        if ($this->opcode && match ($opcode) {
-            Opcode::Text, Opcode::Binary => true,
+        if ($this->currentFrameType && match ($frameType) {
+            WebsocketFrameType::Text, WebsocketFrameType::Binary => true,
             default => false,
         }) {
             throw new \ValueError(\sprintf(
                 'Next frame must be a continuation or control frame; got %s (0x%d) while sending %s (0x%d)',
-                $opcode->name,
-                \dechex($opcode->value),
-                $this->opcode->name,
-                \dechex($opcode->value),
+                $frameType->name,
+                \dechex($frameType->value),
+                $this->currentFrameType->name,
+                \dechex($frameType->value),
             ));
         }
 
-        if (!$this->opcode && $opcode === Opcode::Continuation) {
+        if (!$this->currentFrameType && $frameType === WebsocketFrameType::Continuation) {
             throw new \ValueError('Cannot send a continuation frame without sending a non-final text or binary frame');
         }
 

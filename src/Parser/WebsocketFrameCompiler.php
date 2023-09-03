@@ -2,7 +2,7 @@
 
 namespace Amp\Websocket\Parser;
 
-use Amp\Websocket\Opcode;
+use Amp\Websocket\WebsocketFrameType;
 
 interface WebsocketFrameCompiler
 {
@@ -11,5 +11,5 @@ interface WebsocketFrameCompiler
      * or binary frame. Another text or binary frame cannot be sent until a final continuation frame is sent.
      * Control frames may be interleaved.
      */
-    public function compileFrame(Opcode $opcode, string $data, bool $isFinal): string;
+    public function compileFrame(WebsocketFrameType $frameType, string $data, bool $isFinal): string;
 }
