@@ -48,23 +48,9 @@ interface WebsocketClient extends Closable, \Traversable
     public function getTlsInfo(): ?TlsInfo;
 
     /**
-     * @return int|null Client close code (generally one of those listed in Code, though not necessarily) or `null`
-     *      if the client has not closed.
+     * @return WebsocketCloseInfo Throws an instance of Error if the client has not closed.
      */
-    public function getCloseCode(): ?int;
-
-    /**
-     * @return string|null Client close reason or `null` if the client has not closed.
-     */
-    public function getCloseReason(): ?string;
-
-    /**
-     * @return bool `true` if the peer initiated the websocket close, `false` if initiated by self, or `null` if the
-     *      client has not closed.
-     *
-     * @throws \Error Thrown if the client has not closed.
-     */
-    public function isClosedByPeer(): ?bool;
+    public function getCloseInfo(): WebsocketCloseInfo;
 
     /**
      * @return bool Determines if a compression context has been negotiated.
@@ -139,9 +125,8 @@ interface WebsocketClient extends Closable, \Traversable
     /**
      * Attaches a callback invoked when the client closes. The callback is passed this client as the only parameter.
      *
-     * @param \Closure(int $clientId, int $closeCode, string $closeReason, bool $closedByPeer):void $onClose
-     *      Function is passed the client ID, close code, close reason, and boolean flag if the connection was
-     *      closed by the peer.
+     * @param \Closure(int, WebsocketCloseInfo):void $onClose Function is passed the client ID and
+     *      {@see WebsocketCloseInfo} object.
      */
     public function onClose(\Closure $onClose): void;
 }

@@ -51,8 +51,9 @@ class ParserTest extends AsyncTestCase
             $this->assertSame($reason, $exception->getReason());
         }
 
-        $this->assertSame($code ?? WebsocketCloseCode::NORMAL_CLOSE, $client->getCloseCode());
-        $this->assertSame($reason ?? '', $client->getCloseReason());
+        $closeInfo = $client->getCloseInfo();
+        $this->assertSame($code ?? WebsocketCloseCode::NORMAL_CLOSE, $closeInfo->getCode());
+        $this->assertSame($reason ?? '', $closeInfo->getReason());
     }
 
     public function provideParserData(): array

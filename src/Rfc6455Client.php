@@ -120,19 +120,13 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         return $this->socket->getTlsInfo();
     }
 
-    public function getCloseCode(): ?int
+    public function getCloseInfo(): WebsocketCloseInfo
     {
-        return $this->metadata->closeCode;
-    }
+        if (!$this->metadata->closeInfo) {
+            throw new \Error('The client has not closed; check WebsocketClient::isClosed() before calling this method');
+        }
 
-    public function getCloseReason(): ?string
-    {
-        return $this->metadata->closeReason;
-    }
-
-    public function isClosedByPeer(): ?bool
-    {
-        return $this->metadata->closedByPeer;
+        return $this->metadata->closeInfo;
     }
 
     public function isCompressionEnabled(): bool
@@ -313,11 +307,9 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
     public function onClose(\Closure $onClose): void
     {
         $metadata = $this->metadata;
-        $this->socket->onClose(static fn () => $onClose(
-            $metadata->id,
-            $metadata->closeCode ?? WebsocketCloseCode::ABNORMAL_CLOSE,
-            $metadata->closeReason ?? 'Connection closed unexpectedly',
-            $metadata->closedByPeer,
-        ));
+        $this->socket->onClose(static function () use ($onClose, $metadata): void {
+            \assert($metadata->closeInfo !== null, 'Client was not closed when onClose invoked');
+            $onClose($metadata->id, $metadata->closeInfo);
+        });
     }
 }

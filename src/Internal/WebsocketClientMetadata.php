@@ -2,6 +2,8 @@
 
 namespace Amp\Websocket\Internal;
 
+use Amp\Websocket\WebsocketCloseInfo;
+
 /** @internal */
 final class WebsocketClientMetadata
 {
@@ -11,11 +13,7 @@ final class WebsocketClientMetadata
     /** @var int<0, max> */
     public readonly int $id;
 
-    public bool $closedByPeer = false;
-
-    public ?int $closeCode = null;
-
-    public ?string $closeReason = null;
+    public ?WebsocketCloseInfo $closeInfo = null;
 
     /** @var int<0, max> */
     public readonly int $connectedAt;
@@ -78,6 +76,6 @@ final class WebsocketClientMetadata
 
     public function isClosed(): bool
     {
-        return (bool) $this->closedAt;
+        return $this->closeInfo !== null;
     }
 }
