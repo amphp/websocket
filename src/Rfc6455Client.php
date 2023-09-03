@@ -14,7 +14,9 @@ use Amp\Socket\Socket;
 use Amp\Socket\SocketAddress;
 use Amp\Socket\TlsInfo;
 use Amp\Websocket\Compression\CompressionContext;
+use Amp\Websocket\Parser\Rfc6455FrameCompilerFactory;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
+use Amp\Websocket\Parser\WebsocketFrameCompilerFactory;
 use Amp\Websocket\Parser\WebsocketParserFactory;
 use Revolt\EventLoop;
 
@@ -45,6 +47,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         private readonly Socket $socket,
         bool $masked,
         WebsocketParserFactory $parserFactory = new Rfc6455ParserFactory(),
+        WebsocketFrameCompilerFactory $compilerFactory = new Rfc6455FrameCompilerFactory(),
         ?CompressionContext $compressionContext = null,
         ?HeartbeatQueue $heartbeatQueue = null,
         ?RateLimiter $rateLimiter = null,
@@ -54,10 +57,8 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         $this->metadata = new Internal\WebsocketClientMetadata($compressionContext !== null);
 
         $this->frameHandler = new Internal\Rfc6455FrameHandler(
-            socket: $socket,
-            masked: $masked,
-            parserFactory: $parserFactory,
-            compressionContext: $compressionContext,
+            socket: $this->socket,
+            frameCompiler: $compilerFactory->createFrameCompiler($masked, $compressionContext),
             heartbeatQueue: $heartbeatQueue,
             rateLimiter: $rateLimiter,
             metadata: $this->metadata,
@@ -68,7 +69,10 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
 
         $heartbeatQueue?->insert($this);
 
-        EventLoop::queue($this->frameHandler->read(...));
+        EventLoop::queue(
+            $this->frameHandler->read(...),
+            $parserFactory->createParser($this->frameHandler, $masked, $compressionContext),
+        );
     }
 
     public function __destruct()

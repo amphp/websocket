@@ -23,7 +23,7 @@ final class Rfc6455ParserFactory implements WebsocketParserFactory
         WebsocketFrameHandler $frameHandler,
         bool $masked,
         ?CompressionContext $compressionContext = null,
-    ): WebsocketParser {
+    ): Rfc6455Parser {
         return new Rfc6455Parser(
             $frameHandler,
             $masked,

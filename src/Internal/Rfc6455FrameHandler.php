@@ -14,13 +14,12 @@ use Amp\Socket\Socket;
 use Amp\TimeoutCancellation;
 use Amp\Websocket\CloseCode;
 use Amp\Websocket\ClosedException;
-use Amp\Websocket\Compression\CompressionContext;
 use Amp\Websocket\HeartbeatQueue;
 use Amp\Websocket\Opcode;
 use Amp\Websocket\Parser\ParserException;
+use Amp\Websocket\Parser\WebsocketFrameCompiler;
 use Amp\Websocket\Parser\WebsocketFrameHandler;
 use Amp\Websocket\Parser\WebsocketParser;
-use Amp\Websocket\Parser\WebsocketParserFactory;
 use Amp\Websocket\RateLimiter;
 use Amp\Websocket\WebsocketMessage;
 use function Amp\async;
@@ -39,13 +38,9 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
     /** @var Queue<string>|null */
     private ?Queue $currentMessageQueue = null;
 
-    private readonly WebsocketParser $parser;
-
     public function __construct(
         private readonly Socket $socket,
-        bool $masked,
-        WebsocketParserFactory $parserFactory,
-        ?CompressionContext $compressionContext,
+        private readonly WebsocketFrameCompiler $frameCompiler,
         private readonly ?HeartbeatQueue $heartbeatQueue,
         private readonly ?RateLimiter $rateLimiter,
         private readonly WebsocketClientMetadata $metadata,
@@ -53,8 +48,6 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
     ) {
         $this->closeDeferred = new DeferredFuture();
         $this->messageQueue = new Queue();
-
-        $this->parser = $parserFactory->createParser($this, $masked, $compressionContext);
     }
 
     /**
@@ -65,7 +58,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         return $this->messageQueue->iterate();
     }
 
-    public function read(): void
+    public function read(WebsocketParser $parser): void
     {
         try {
             while (($chunk = $this->socket->read()) !== null) {
@@ -79,7 +72,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                 $this->heartbeatQueue?->update($this->metadata->id);
                 $this->rateLimiter?->notifyBytesReceived($this->metadata->id, \strlen($chunk));
 
-                $this->parser->push($chunk);
+                $parser->push($chunk);
 
                 $chunk = ''; // Free memory from last chunk read.
             }
@@ -89,7 +82,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         } catch (\Throwable $exception) {
             $message = 'TCP connection closed with exception: ' . $exception->getMessage();
         } finally {
-            $this->parser->cancel();
+            $parser->cancel();
             $this->heartbeatQueue?->remove($this->metadata->id);
         }
 
@@ -250,7 +243,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
     public function write(Opcode $opcode, string $data, bool $isFinal = true): void
     {
-        $frame = $this->parser->compileFrame($opcode, $data, $isFinal);
+        $frame = $this->frameCompiler->compileFrame($opcode, $data, $isFinal);
 
         ++$this->metadata->framesSent;
         $this->metadata->bytesSent += \strlen($frame);
