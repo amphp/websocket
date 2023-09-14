@@ -307,10 +307,6 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
 
     public function onClose(\Closure $onClose): void
     {
-        $metadata = $this->metadata;
-        $this->socket->onClose(static function () use ($onClose, $metadata): void {
-            \assert($metadata->closeInfo !== null, 'Client was not closed when onClose invoked');
-            $onClose($metadata->id, $metadata->closeInfo);
-        });
+        $this->frameHandler->onClose($onClose);
     }
 }

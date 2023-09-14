@@ -7,6 +7,7 @@ use Amp\ByteStream\ReadableStream;
 use Amp\DeferredFuture;
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
+use Amp\Future;
 use Amp\Pipeline\ConcurrentIterator;
 use Amp\Pipeline\DisposedException;
 use Amp\Pipeline\Queue;
@@ -297,6 +298,20 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
         }
 
         $this->socket->close();
+    }
+
+    /**
+     * @param \Closure(int, WebsocketCloseInfo):void $onClose
+     */
+    public function onClose(\Closure $onClose): void
+    {
+        $future = $this->closeDeferred?->getFuture() ?? Future::complete();
+
+        $metadata = $this->metadata;
+        $future->finally(static function () use ($onClose, $metadata): void {
+            \assert($metadata->closeInfo !== null, 'Client was not closed when onClose invoked');
+            $onClose($metadata->id, $metadata->closeInfo);
+        });
     }
 
     private static function createMessage(WebsocketFrameType $frameType, ReadableStream|string $stream): WebsocketMessage
