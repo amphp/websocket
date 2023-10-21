@@ -36,12 +36,20 @@ class CompressionTest extends AsyncTestCase
     /**
      * @dataProvider provideValidHeaders
      */
-    public function testFromClient(string $header): void
+    public function testFromClient(string $header): string
     {
         $compression = Rfc7692Compression::fromClientHeader($header, $out);
         self::assertNotNull($out);
         self::assertNotNull($compression);
         $this->testCompression($compression);
+
+        return $out;
+    }
+
+    public function testClientHeaderWithoutValueForClientMaxWindowBits(): void
+    {
+        $out = $this->testFromClient('permessage-deflate; client_max_window_bits; client_no_context_takeover');
+        $this->assertStringContainsString('client_max_window_bits=15', $out);
     }
 
     private function testCompression(Rfc7692Compression $compression): void
@@ -63,7 +71,6 @@ class CompressionTest extends AsyncTestCase
                     'client_max_window_bits=16', // window too high
                     'client_max_window_bits=8', // window too low
                     'server_max_window_bits', // no value
-                    'client_max_window_bits', // no value
                 ],
             )
         ];
