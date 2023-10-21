@@ -86,17 +86,17 @@ final class Rfc7692Compression implements WebsocketCompressionContext
 
             switch ($parts[0]) {
                 case 'client_max_window_bits':
-                    if (!isset($parts[1])) {
+                    if (isset($parts[1])) {
+                        $value = (int) $parts[1];
+
+                        if ($value < 9 || $value > 15) {
+                            return null; // Invalid option value.
+                        }
+
+                        $clientWindowSize = $value;
+                    } elseif (!$isServer) {
                         return null;
                     }
-
-                    $value = (int) $parts[1];
-
-                    if ($value < 9 || $value > 15) {
-                        return null; // Invalid option value.
-                    }
-
-                    $clientWindowSize = $value;
 
                     $headerOut .= '; client_max_window_bits=' . $clientWindowSize;
                     break;
