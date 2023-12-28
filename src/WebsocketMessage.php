@@ -5,7 +5,6 @@ namespace Amp\Websocket;
 use Amp\ByteStream\BufferException;
 use Amp\ByteStream\Payload;
 use Amp\ByteStream\ReadableStream;
-use Amp\ByteStream\StreamException;
 use Amp\Cancellation;
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
