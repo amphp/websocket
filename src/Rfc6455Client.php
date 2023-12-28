@@ -224,6 +224,7 @@ final class Rfc6455Client implements WebsocketClient, \IteratorAggregate
         $this->lastWrite ??= Future::complete();
 
         // Setting $this->lastWrite will force subsequent sends to queue until this stream has ended.
+        /** @psalm-suppress UndefinedVariable $thisWrite is defined below. */
         $this->lastWrite = $thisWrite = $this->lastWrite->map(
             function () use (&$thisWrite, $stream, $frameType): void {
                 try {
