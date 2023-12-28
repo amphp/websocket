@@ -2,6 +2,8 @@
 
 namespace Amp\Websocket;
 
-class WebsocketException extends \Exception
+use Amp\ByteStream\StreamException;
+
+class WebsocketException extends StreamException
 {
 }
