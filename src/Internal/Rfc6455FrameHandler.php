@@ -4,6 +4,7 @@ namespace Amp\Websocket\Internal;
 
 use Amp\ByteStream\ReadableIterableStream;
 use Amp\ByteStream\ReadableStream;
+use Amp\ByteStream\StreamException;
 use Amp\DeferredFuture;
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
@@ -19,7 +20,6 @@ use Amp\Websocket\Parser\WebsocketFrameType;
 use Amp\Websocket\Parser\WebsocketParser;
 use Amp\Websocket\Parser\WebsocketParserException;
 use Amp\Websocket\WebsocketCloseCode;
-use Amp\Websocket\WebsocketClosedException;
 use Amp\Websocket\WebsocketCloseInfo;
 use Amp\Websocket\WebsocketHeartbeatQueue;
 use Amp\Websocket\WebsocketMessage;
@@ -271,11 +271,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
         $this->messageQueue->complete();
 
-        $this->currentMessageQueue?->error(new WebsocketClosedException(
-            'Connection closed while streaming message body',
-            $code,
-            $reason,
-        ));
+        $this->currentMessageQueue?->error(new StreamException('Connection closed while streaming message body'));
         $this->currentMessageQueue = null;
 
         if ($this->socket->isClosed()) {

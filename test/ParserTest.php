@@ -2,13 +2,13 @@
 
 namespace Amp\Websocket\Test;
 
+use Amp\ByteStream\StreamException;
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Socket\Socket;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Parser\WebsocketFrameType;
 use Amp\Websocket\Rfc6455Client;
 use Amp\Websocket\WebsocketCloseCode;
-use Amp\Websocket\WebsocketClosedException;
 use function Amp\delay;
 
 class ParserTest extends AsyncTestCase
@@ -46,9 +46,8 @@ class ParserTest extends AsyncTestCase
                 $this->assertSame($isBinary, $message->isBinary());
                 $client->close();
             }
-        } catch (WebsocketClosedException $exception) {
-            $this->assertSame($code, $exception->getCode());
-            $this->assertSame($reason, $exception->getReason());
+        } catch (StreamException $exception) {
+            $this->assertStringContainsString('Connection closed', $exception->getMessage());
         }
 
         $closeInfo = $client->getCloseInfo();
