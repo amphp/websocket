@@ -29,10 +29,13 @@ final class Rfc6455FrameCompiler implements WebsocketFrameCompiler
             $this->compressPayload = !$isFinal || \strlen($data) > $this->compressionContext->getCompressionThreshold();
         }
 
-        $this->currentFrameType = match ($frameType) {
-            WebsocketFrameType::Text, WebsocketFrameType::Binary => $frameType,
-            default => $this->currentFrameType,
+        $isDataFrame = match ($frameType) {
+            WebsocketFrameType::Text, WebsocketFrameType::Binary => true,
+            default => false,
         };
+        if ($isDataFrame) {
+            $this->currentFrameType = $frameType;
+        }
 
         $rsv = 0;
 
@@ -51,7 +54,7 @@ final class Rfc6455FrameCompiler implements WebsocketFrameCompiler
             $isFinal = true; // Reset state in finally.
             throw $exception;
         } finally {
-            if ($isFinal) {
+            if (($isDataFrame || $frameType === WebsocketFrameType::Continuation) && $isFinal) {
                 $this->currentFrameType = null;
                 $this->compressPayload = false;
             }

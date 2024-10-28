@@ -266,6 +266,45 @@ class WebsocketClientTest extends AsyncTestCase
         $client->streamText($stream);
     }
 
+    public function testStreamWithInterleavedControlFrames(): void
+    {
+        $packets = \array_map(fn(string $packet) => [$packet], [
+            compile(WebsocketFrameType::Text, false, false, 'chunk1'),
+            compile(WebsocketFrameType::Continuation, false, false, 'chunk2'),
+            compile(WebsocketFrameType::Ping, false, true, "1"),
+            compile(WebsocketFrameType::Continuation, false, false, 'chunk3'),
+            compile(WebsocketFrameType::Ping, false, true, "2"),
+            compile(WebsocketFrameType::Continuation, false, true, 'chunk4'),
+        ]);
+
+        $socket = $this->createSocket();
+        $future = new DeferredFuture();
+        $socket->expects($this->any())->method("read")->willReturnCallback(function() use ($future) {
+            $future->getFuture()->await();
+        });
+        $socket->expects($this->atLeastOnce())
+            ->method('write')
+            ->withConsecutive(...$packets);
+
+        $client = $this->createClient($socket, frameSplitThreshold: 6);
+
+        $stream = new ReadableIterableStream((function () use ($client) {
+            yield 'chunk1';
+            yield 'chunk2';
+            yield '';
+            $client->ping();
+            yield 'chunk3';
+            yield '';
+            $client->ping();
+            yield 'chunk4';
+        })());
+
+        $client->streamText($stream);
+
+        $future->complete();
+        $client->close();
+    }
+
     public function testSendWithFailedSocket(): void
     {
         $socket = $this->createSocket();
