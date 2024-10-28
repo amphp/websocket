@@ -268,7 +268,7 @@ class WebsocketClientTest extends AsyncTestCase
 
     public function testStreamWithInterleavedControlFrames(): void
     {
-        $packets = \array_map(fn(string $packet) => [$packet], [
+        $packets = \array_map(fn (string $packet) => [$packet], [
             compile(WebsocketFrameType::Text, false, false, 'chunk1'),
             compile(WebsocketFrameType::Continuation, false, false, 'chunk2'),
             compile(WebsocketFrameType::Ping, false, true, "1"),
@@ -279,7 +279,7 @@ class WebsocketClientTest extends AsyncTestCase
 
         $socket = $this->createSocket();
         $future = new DeferredFuture();
-        $socket->expects($this->any())->method("read")->willReturnCallback(function() use ($future) {
+        $socket->expects($this->any())->method("read")->willReturnCallback(function () use ($future) {
             $future->getFuture()->await();
         });
         $socket->expects($this->atLeastOnce())
