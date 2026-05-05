@@ -22,8 +22,8 @@ final class Rfc6455Parser implements WebsocketParser
 
     public function __construct(
         WebsocketFrameHandler $frameHandler,
-        private readonly bool $masked,
-        private readonly ?WebsocketCompressionContext $compressionContext = null,
+        bool $masked,
+        ?WebsocketCompressionContext $compressionContext = null,
         bool $textOnly = self::DEFAULT_TEXT_ONLY,
         bool $validateUtf8 = self::DEFAULT_VALIDATE_UTF8,
         int $messageSizeLimit = self::DEFAULT_MESSAGE_SIZE_LIMIT,
@@ -123,8 +123,10 @@ final class Rfc6455Parser implements WebsocketParser
             }
 
             if ($frameLength === 0x7E) {
+                /** @psalm-suppress PossiblyInvalidArrayAccess */
                 [, $frameLength] = \unpack('n', yield 2);
             } elseif ($frameLength === 0x7F) {
+                /** @psalm-suppress PossiblyInvalidArrayAccess */
                 [, $highBytes, $lowBytes] = \unpack('N2', yield 8);
 
                 if (\PHP_INT_MAX === 0x7fffffff) {

@@ -196,6 +196,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                     $code = WebsocketCloseCode::PROTOCOL_ERROR;
                     $reason = 'Close code must be two bytes';
                 } else {
+                    /** @psalm-suppress PossiblyInvalidArrayAccess */
                     $code = \unpack('n', $data)[1];
                     $reason = \substr($data, 2);
 

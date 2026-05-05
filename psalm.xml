@@ -14,16 +14,41 @@
     </projectFiles>
 
     <issueHandlers>
+        <MissingOverrideAttribute>
+            <errorLevel type="suppress">
+                <directory name="src"/>
+            </errorLevel>
+        </MissingOverrideAttribute>
+
         <DocblockTypeContradiction>
             <errorLevel type="suppress">
                 <directory name="src"/>
             </errorLevel>
         </DocblockTypeContradiction>
 
-        <MissingClosureReturnType>
+        <UnusedClass>
             <errorLevel type="suppress">
-                <directory name="src" />
+                <directory name="src"/>
             </errorLevel>
-        </MissingClosureReturnType>
+        </UnusedClass>
+
+        <UnusedConstructor>
+            <errorLevel type="suppress">
+                <directory name="src"/>
+            </errorLevel>
+        </UnusedConstructor>
+
+        <!-- https://github.com/vimeo/psalm/issues/9978 -->
+        <UnusedVariable>
+            <errorLevel type="suppress">
+                <directory name="src"/>
+            </errorLevel>
+        </UnusedVariable>
+
+        <PossiblyUnusedMethod>
+            <errorLevel type="suppress">
+                <directory name="src"/>
+            </errorLevel>
+        </PossiblyUnusedMethod>
     </issueHandlers>
 </psalm>

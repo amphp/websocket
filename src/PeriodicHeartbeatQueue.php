@@ -52,7 +52,6 @@ final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
                     break;
                 }
 
-                /** @var WebsocketClient|null $client */
                 $client = ($this->clients[$clientId] ?? null)?->get();
                 if (!$client) {
                     unset($this->heartbeatTimeouts[$clientId]);
@@ -90,7 +89,7 @@ final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
     {
         \assert(isset($this->clients[$clientId]));
         unset($this->heartbeatTimeouts[$clientId]); // Unset to force ordering to end of list.
-        $this->heartbeatTimeouts[$clientId] = $this->now + $this->heartbeatPeriod;
+        $this->heartbeatTimeouts[$clientId] = $this->now + (float) $this->heartbeatPeriod;
     }
 
     public function remove(int $clientId): void
