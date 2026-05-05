@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Amp\Websocket\Test;
+namespace Amp\Websocket;
 
 use Amp\Websocket\Parser\WebsocketFrameType;
 

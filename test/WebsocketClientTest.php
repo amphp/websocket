@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Amp\Websocket\Test;
+namespace Amp\Websocket;
 
 use Amp\ByteStream\ReadableBuffer;
 use Amp\ByteStream\ReadableIterableStream;
@@ -12,10 +12,6 @@ use Amp\Socket\Socket;
 use Amp\Socket\SocketException;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\Parser\WebsocketFrameType;
-use Amp\Websocket\Rfc6455Client;
-use Amp\Websocket\WebsocketCloseCode;
-use Amp\Websocket\WebsocketClosedException;
-use Amp\Websocket\WebsocketTimestamp;
 use PHPUnit\Framework\MockObject\MockObject;
 use Revolt\EventLoop;
 use function Amp\async;

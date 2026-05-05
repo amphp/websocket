@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace Amp\Websocket\Test;
+namespace Amp\Websocket;
 
 use Amp\PHPUnit\AsyncTestCase;
 use Amp\Websocket\Compression\Rfc7692Compression;
