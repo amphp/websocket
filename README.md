@@ -12,7 +12,7 @@ composer require amphp/websocket
 
 ## Requirements
 
-* PHP 8.2+
+* PHP 8.1+
 
 ## Versioning
 
