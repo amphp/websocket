@@ -4,7 +4,7 @@ namespace Amp\Websocket;
 
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
-use Revolt\EventLoop;
+use Amp\Interval;
 use function Amp\async;
 use function Amp\weakClosure;
 
@@ -16,7 +16,7 @@ final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
     /** @var array<int, \WeakReference<WebsocketClient>> */
     private array $clients = [];
 
-    private readonly string $watcher;
+    private readonly Interval $interval;
 
     /** @var array<int, float> Least-recently-used cache of next ping (heartbeat) times. */
     private array $heartbeatTimeouts = [];
@@ -44,7 +44,7 @@ final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
 
         $this->now = \microtime(true);
 
-        $this->watcher = EventLoop::repeat(1, weakClosure(function () use ($queuedPingLimit): void {
+        $this->interval = new Interval(1, weakClosure(function () use ($queuedPingLimit): void {
             $this->now = \microtime(true);
 
             foreach ($this->heartbeatTimeouts as $clientId => $expiryTime) {
@@ -60,7 +60,12 @@ final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
 
                 if ($client->getCount(WebsocketCount::UnansweredPings) > $queuedPingLimit) {
                     $this->remove($clientId);
-                    async($client->close(...), WebsocketCloseCode::POLICY_VIOLATION, 'Exceeded unanswered PING limit')->ignore();
+                    async(
+                        $client->close(...),
+                        WebsocketCloseCode::POLICY_VIOLATION,
+                        'Exceeded unanswered PING limit',
+                    )->ignore();
+
                     continue;
                 }
 
@@ -68,14 +73,7 @@ final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
 
                 async($client->ping(...))->ignore();
             }
-        }));
-
-        EventLoop::unreference($this->watcher);
-    }
-
-    public function __destruct()
-    {
-        EventLoop::cancel($this->watcher);
+        }), reference: false);
     }
 
     public function insert(WebsocketClient $client): void

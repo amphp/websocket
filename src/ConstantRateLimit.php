@@ -4,6 +4,7 @@ namespace Amp\Websocket;
 
 use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
+use Amp\Interval;
 use Revolt\EventLoop;
 use Revolt\EventLoop\Suspension;
 use function Amp\weakClosure;
@@ -19,10 +20,10 @@ final class ConstantRateLimit implements WebsocketRateLimit
     /** @var array<int, int> */
     private array $framesReadInLastSecond = [];
 
-    /** @var Suspension[] */
+    /** @var array<int, Suspension> */
     private array $rateSuspensions = [];
 
-    private readonly string $watcher;
+    private readonly Interval $interval;
 
     /**
      * @param positive-int $bytesPerSecondLimit
@@ -42,12 +43,12 @@ final class ConstantRateLimit implements WebsocketRateLimit
             throw new \ValueError('Frames-per-second limit must be greater than 0');
         }
 
-        $this->watcher = EventLoop::repeat(1, weakClosure(function (string $watcher): void {
+        $this->interval = new Interval(1, weakClosure(function (): void {
             $this->bytesReadInLastSecond = [];
             $this->framesReadInLastSecond = [];
 
             if (!empty($this->rateSuspensions)) {
-                EventLoop::unreference($watcher);
+                $this->interval->unreference();
 
                 foreach ($this->rateSuspensions as $suspension) {
                     $suspension->resume();
@@ -55,14 +56,7 @@ final class ConstantRateLimit implements WebsocketRateLimit
 
                 $this->rateSuspensions = [];
             }
-        }));
-
-        EventLoop::unreference($this->watcher);
-    }
-
-    public function __destruct()
-    {
-        EventLoop::cancel($this->watcher);
+        }), reference: false);
     }
 
     public function notifyBytesReceived(int $clientId, int $byteCount): void
@@ -71,7 +65,7 @@ final class ConstantRateLimit implements WebsocketRateLimit
 
         if ($count >= $this->bytesPerSecondLimit) {
             $suspension = $this->rateSuspensions[$clientId] ??= EventLoop::getSuspension();
-            EventLoop::reference($this->watcher);
+            $this->interval->reference();
             $suspension->suspend();
         }
     }
@@ -82,7 +76,7 @@ final class ConstantRateLimit implements WebsocketRateLimit
 
         if ($count >= $this->framesPerSecondLimit) {
             $suspension = $this->rateSuspensions[$clientId] ??= EventLoop::getSuspension();
-            EventLoop::reference($this->watcher);
+            $this->interval->reference();
             $suspension->suspend();
         }
     }
