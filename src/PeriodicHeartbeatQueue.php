@@ -6,6 +6,7 @@ use Amp\ForbidCloning;
 use Amp\ForbidSerialization;
 use Amp\Interval;
 use function Amp\async;
+use function Amp\now;
 use function Amp\weakClosure;
 
 final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
@@ -42,10 +43,10 @@ final class PeriodicHeartbeatQueue implements WebsocketHeartbeatQueue
             throw new \ValueError('Heartbeat period must be greater than 0');
         }
 
-        $this->now = \microtime(true);
+        $this->now = now();
 
         $this->interval = new Interval(1, weakClosure(function () use ($queuedPingLimit): void {
-            $this->now = \microtime(true);
+            $this->now = now();
 
             foreach ($this->heartbeatTimeouts as $clientId => $expiryTime) {
                 if ($expiryTime >= $this->now) {
