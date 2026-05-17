@@ -220,9 +220,9 @@ class WebsocketClientTest extends AsyncTestCase
         $client = $this->createClient($socket);
 
         $emitter = new Queue();
-        $emitter->pushAsync('chunk1');
-        $emitter->pushAsync('chunk2');
-        $emitter->pushAsync('chunk3');
+        $emitter->pushAsync('chunk1')->ignore();
+        $emitter->pushAsync('chunk2')->ignore();
+        $emitter->pushAsync('chunk3')->ignore();
         $emitter->complete();
 
         $stream = new ReadableIterableStream($emitter->pipe());
@@ -251,10 +251,10 @@ class WebsocketClientTest extends AsyncTestCase
         $client = $this->createClient($socket);
 
         $emitter = new Queue();
-        $emitter->pushAsync('chunk1');
-        $emitter->pushAsync('chunk2');
-        $emitter->pushAsync('chunk');
-        $emitter->pushAsync('3');
+        $emitter->pushAsync('chunk1')->ignore();
+        $emitter->pushAsync('chunk2')->ignore();
+        $emitter->pushAsync('chunk')->ignore();
+        $emitter->pushAsync('3')->ignore();
         $emitter->complete();
 
         $stream = new ReadableIterableStream($emitter->pipe());
@@ -333,10 +333,10 @@ class WebsocketClientTest extends AsyncTestCase
         $client = $this->createClient($socket);
 
         $emitter = new Queue();
-        $emitter->pushAsync('chunk1');
-        $emitter->pushAsync('chunk2');
-        $emitter->pushAsync('chunk');
-        $emitter->pushAsync('3');
+        $emitter->pushAsync('chunk1')->ignore();
+        $emitter->pushAsync('chunk2')->ignore();
+        $emitter->pushAsync('chunk')->ignore();
+        $emitter->pushAsync('3')->ignore();
         $emitter->complete();
 
         $stream = new ReadableIterableStream($emitter->pipe());
@@ -354,7 +354,7 @@ class WebsocketClientTest extends AsyncTestCase
         $exception = new \Exception('Test exception');
 
         $emitter = new Queue();
-        $emitter->pushAsync('chunk');
+        $emitter->pushAsync('chunk')->ignore();
         $emitter->error($exception);
 
         $this->expectExceptionObject($exception);
