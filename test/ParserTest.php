@@ -46,7 +46,9 @@ class ParserTest extends AsyncTestCase
         } catch (WebsocketClosedException $exception) {
             $this->assertStringContainsString('Connection closed', $exception->getMessage());
             $this->assertSame($code, $exception->getCode());
+            $this->assertSame($code, $exception->getCloseCode());
             $this->assertSame($reason, $exception->getReason());
+            $this->assertSame(WebsocketCloseCode::getName($code), $exception->getCloseCodeName());
         }
 
         $closeInfo = $client->getCloseInfo();

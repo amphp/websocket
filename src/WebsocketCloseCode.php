@@ -24,7 +24,7 @@ final class WebsocketCloseCode
     /**
      * @param int $code Close code.
      *
-     * @return string|null Constant name corresponding to the given code or null if the code is undefined.
+     * @return non-empty-string|null Constant name corresponding to the given code or null if the code is undefined.
      */
     public static function getName(int $code): ?string
     {
