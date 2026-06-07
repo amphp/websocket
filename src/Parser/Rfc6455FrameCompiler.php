@@ -92,7 +92,7 @@ final class Rfc6455FrameCompiler implements WebsocketFrameCompiler
                 $frameType->name,
                 \dechex($frameType->value),
                 $this->currentFrameType->name,
-                \dechex($frameType->value),
+                \dechex($this->currentFrameType->value),
             ));
         }
 
