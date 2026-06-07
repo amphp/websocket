@@ -232,9 +232,11 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
                     break;
                 }
 
-                // We need a min() here, else someone might just send a pong frame with a very high pong count and
-                // leave TCP connection in open state... Then we'd accumulate connections which never are cleaned up...
-                $this->metadata->pongsReceived = \min($this->metadata->pingsSent, \max(0, (int) $data));
+                // Use min and max to prevent a peer artificially lowering or raising the received pong value.
+                $this->metadata->pongsReceived = \max(
+                    $this->metadata->pongsReceived,
+                    \min($this->metadata->pingsSent, (int) $data),
+                );
                 $this->metadata->lastHeartbeatAt = \microtime(true);
                 break;
 
