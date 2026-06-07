@@ -202,7 +202,7 @@ final class Rfc6455FrameHandler implements WebsocketFrameHandler
 
                     if ($code < 1000 // Reserved and unused.
                         || ($code >= 1004 && $code <= 1006) // Should not be sent over wire
-                        || ($code >= 1014 && $code <= 1015) // Should not be sent over wire
+                        || $code === 1015 // Should not be sent over wire
                         || ($code >= 1016 && $code <= 1999) // Disallowed, reserved for future use
                         || ($code >= 2000 && $code <= 2999) // Disallowed, reserved for Websocket extensions
                         // 3000-3999 allowed, reserved for libraries
