@@ -36,10 +36,7 @@ final class WebsocketClosedException extends WebsocketException
      */
     public function getCloseCode(): int
     {
-        $code = $this->code;
-        \assert(\is_int($code)); // For Psalm.
-
-        return $code;
+        return $this->code;
     }
 
     /**
