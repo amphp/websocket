@@ -12,7 +12,7 @@ final class Rfc7692Compression implements WebsocketCompressionContext
 
     public const DEFAULT_WINDOW_SIZE = 15;
 
-    private const RSV = 0b100;
+    public const RSV = 0b100;
     private const MINIMUM_LENGTH = 860;
     private const EMPTY_BLOCK = "\x0\x0\xff\xff";
 

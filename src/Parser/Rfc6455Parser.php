@@ -18,6 +18,12 @@ final class Rfc6455Parser implements WebsocketParser
     public const DEFAULT_MESSAGE_SIZE_LIMIT = (2 ** 20) * 10; // 10MB
     public const DEFAULT_FRAME_SIZE_LIMIT = 2 ** 20; // 1MB
 
+    /** Upper bound of the DEFLATE expansion ratio (a 258-byte match can be coded in 2 bits): about 1032:1. */
+    private const MAX_INFLATE_RATIO = 1032;
+
+    private const MIN_INFLATE_CHUNK = 256;
+    private const MAX_INFLATE_CHUNK = 65536;
+
     private readonly Parser $parser;
 
     public function __construct(
@@ -70,6 +76,7 @@ final class Rfc6455Parser implements WebsocketParser
         $compressedFlag = $compressionContext?->getRsv() ?? 0;
 
         $dataMsgBytesRecd = 0;
+        $dataMsgBytesInflated = 0;
         $savedBuffer = '';
         $compressed = false;
 
@@ -214,21 +221,23 @@ final class Rfc6455Parser implements WebsocketParser
 
             $dataMsgBytesRecd += $frameLength;
 
+            if ($compressed) {
+                /** @psalm-suppress PossiblyNullReference */
+                $payload = self::decompress(
+                    $compressionContext,
+                    $payload,
+                    $final,
+                    $messageSizeLimit,
+                    $dataMsgBytesInflated,
+                );
+
+                $dataMsgBytesInflated += \strlen($payload);
+            }
+
+            // Bytes held back by UTF-8 validation are already decompressed, so they are prepended afterwards.
             if ($savedBuffer !== '') {
                 $payload = $savedBuffer . $payload;
                 $savedBuffer = '';
-            }
-
-            if ($compressed) {
-                /** @psalm-suppress PossiblyNullReference */
-                $payload = $compressionContext->decompress($payload, $final);
-
-                if ($payload === null) { // Decompression failed.
-                    throw new WebsocketParserException(
-                        WebsocketCloseCode::PROTOCOL_ERROR,
-                        'Invalid compressed data'
-                    );
-                }
             }
 
             if ($doUtf8Validation) {
@@ -256,9 +265,64 @@ final class Rfc6455Parser implements WebsocketParser
 
             if ($final) {
                 $dataMsgBytesRecd = 0;
+                $dataMsgBytesInflated = 0;
             }
 
             $frameHandler->handleFrame($frameType, $payload, $final);
         }
+    }
+
+    /**
+     * Decompresses a frame payload in input slices so a deflate bomb is rejected once the decompressed message
+     * exceeds the message size limit, instead of after inflating the whole frame. Each slice is sized from the
+     * remaining budget and the maximum DEFLATE ratio, which bounds the output a single slice can produce.
+     *
+     * @param int $inflatedBytesReceived Decompressed bytes of the current message received thus far.
+     */
+    private static function decompress(
+        WebsocketCompressionContext $compressionContext,
+        string $payload,
+        bool $final,
+        int $messageSizeLimit,
+        int $inflatedBytesReceived,
+    ): string {
+        $length = \strlen($payload);
+        $offset = 0;
+        $output = '';
+
+        do {
+            if ($messageSizeLimit) {
+                $chunkSize = \intdiv(\max(0, $messageSizeLimit - $inflatedBytesReceived), self::MAX_INFLATE_RATIO) + 1;
+                $chunkSize = \min(\max($chunkSize, self::MIN_INFLATE_CHUNK), self::MAX_INFLATE_CHUNK);
+            } else {
+                $chunkSize = \max($length, 1);
+            }
+
+            $chunk = $offset === 0 && $chunkSize >= $length ? $payload : \substr($payload, $offset, $chunkSize);
+            $offset += $chunkSize;
+            $isLast = $offset >= $length;
+
+            $data = $compressionContext->decompress($chunk, $final && $isLast);
+
+            if ($data === null) { // Decompression failed.
+                throw new WebsocketParserException(
+                    WebsocketCloseCode::PROTOCOL_ERROR,
+                    'Invalid compressed data'
+                );
+            }
+
+            $inflatedBytesReceived += \strlen($data);
+
+            if ($messageSizeLimit && $inflatedBytesReceived > $messageSizeLimit) {
+                throw new WebsocketParserException(
+                    WebsocketCloseCode::MESSAGE_TOO_LARGE,
+                    'Received payload exceeds maximum allowable size'
+                );
+            }
+
+            $output .= $data;
+        } while (!$isLast);
+
+        return $output;
     }
 }
