@@ -22,6 +22,12 @@ use function Amp\getCurrentTime;
 
 final class Rfc6455Client implements Client
 {
+    /** Upper bound of the DEFLATE expansion ratio (a 258-byte match can be coded in 2 bits): about 1032:1. */
+    private const MAX_INFLATE_RATIO = 1032;
+
+    private const MIN_INFLATE_CHUNK = 256;
+    private const MAX_INFLATE_CHUNK = 65536;
+
     /** @var self[] */
     private static $clients = [];
 
@@ -734,6 +740,7 @@ final class Rfc6455Client implements Client
         $compressedFlag = $compressionContext ? $compressionContext->getRsv() : 0;
 
         $dataMsgBytesRecd = 0;
+        $dataMsgBytesInflated = 0;
         $savedBuffer = '';
         $compressed = false;
 
@@ -923,22 +930,27 @@ final class Rfc6455Client implements Client
 
             $dataMsgBytesRecd += $frameLength;
 
+            if ($compressed) {
+                /** @psalm-suppress PossiblyNullArgument */
+                $payload = $this->decompress(
+                    $compressionContext,
+                    $payload,
+                    $final,
+                    $messageSizeLimit,
+                    $dataMsgBytesInflated
+                );
+
+                if ($payload === null) { // Decompression failed or message size limit exceeded.
+                    return;
+                }
+
+                $dataMsgBytesInflated += \strlen($payload);
+            }
+
+            // Bytes held back by UTF-8 validation are already decompressed, so they are prepended afterwards.
             if ($savedBuffer !== '') {
                 $payload = $savedBuffer . $payload;
                 $savedBuffer = '';
-            }
-
-            if ($compressed) {
-                /** @psalm-suppress PossiblyNullReference */
-                $payload = $compressionContext->decompress($payload, $final);
-
-                if ($payload === null) { // Decompression failed.
-                    $this->onError(
-                        Code::PROTOCOL_ERROR,
-                        'Invalid compressed data'
-                    );
-                    return;
-                }
             }
 
             if ($doUtf8Validation) {
@@ -967,9 +979,66 @@ final class Rfc6455Client implements Client
 
             if ($final) {
                 $dataMsgBytesRecd = 0;
+                $dataMsgBytesInflated = 0;
             }
 
             $this->onData($opcode, $payload, $final);
         }
+    }
+
+    /**
+     * Decompresses a frame payload in input slices so a deflate bomb is rejected once the decompressed message
+     * exceeds the message size limit, instead of after inflating the whole frame. Each slice is sized from the
+     * remaining budget and the maximum DEFLATE ratio, which bounds the output a single slice can produce.
+     *
+     * @param int $inflatedBytesReceived Decompressed bytes of the current message received thus far.
+     */
+    private function decompress(
+        CompressionContext $compressionContext,
+        string $payload,
+        bool $final,
+        int $messageSizeLimit,
+        int $inflatedBytesReceived
+    ): ?string {
+        $length = \strlen($payload);
+        $offset = 0;
+        $output = '';
+
+        do {
+            if ($messageSizeLimit) {
+                $chunkSize = \intdiv(\max(0, $messageSizeLimit - $inflatedBytesReceived), self::MAX_INFLATE_RATIO) + 1;
+                $chunkSize = \min(\max($chunkSize, self::MIN_INFLATE_CHUNK), self::MAX_INFLATE_CHUNK);
+            } else {
+                $chunkSize = \max($length, 1);
+            }
+
+            $chunk = $offset === 0 && $chunkSize >= $length ? $payload : \substr($payload, $offset, $chunkSize);
+            $offset += $chunkSize;
+            $isLast = $offset >= $length;
+
+            $data = $compressionContext->decompress($chunk, $final && $isLast);
+
+            if ($data === null) { // Decompression failed.
+                $this->onError(
+                    Code::PROTOCOL_ERROR,
+                    'Invalid compressed data'
+                );
+                return null;
+            }
+
+            $inflatedBytesReceived += \strlen($data);
+
+            if ($messageSizeLimit && $inflatedBytesReceived > $messageSizeLimit) {
+                $this->onError(
+                    Code::MESSAGE_TOO_LARGE,
+                    'Received payload exceeds maximum allowable size'
+                );
+                return null;
+            }
+
+            $output .= $data;
+        } while (!$isLast);
+
+        return $output;
     }
 }
