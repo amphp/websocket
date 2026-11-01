@@ -222,7 +222,7 @@ final class Rfc6455Parser implements WebsocketParser
             $dataMsgBytesRecd += $frameLength;
 
             if ($compressed) {
-                /** @psalm-suppress PossiblyNullReference */
+                /** @psalm-suppress PossiblyNullArgument $compressed will not be true if $compressionContext is null */
                 $payload = self::decompress(
                     $compressionContext,
                     $payload,
